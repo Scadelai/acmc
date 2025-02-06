@@ -1,6 +1,4 @@
-/* Um programa simples com while e if */
-
-void main(void) { 
+int main(void) { 
   int x; int y;
   x = 0;
   y = 20;

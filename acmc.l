@@ -1,82 +1,82 @@
 %{
-#include "acmc.tab.h"   /* Cabeçalho gerado pelo Bison contendo as definições dos tokens */
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include "globals.h"
+#include "util.h"
+#include "scan.h"
 
-int line_num = 1;
+static int yylex(void);
 
-void lex_error(const char *s);
-/* Redefine yyerror para lex_error neste arquivo */
-#define yyerror lex_error
+/* lexeme of identifier or reserved word */
+char tokenString[MAXTOKENLEN+1];
 %}
 
 %option noyywrap
 
+digito       [0-9]
+numero      {digito}+
+letra      [a-zA-Z]
+identificador  {letra}+
+newline     \n
+whitespace  [ \t\r]+
+
 %%
-"/*"    { 
-            char c;
-            int ast = 0;
-            do {
-                c = input();
-                if (c == EOF) break;
-                if (c == '\n') line_num++;
-                if (c == '*') {
-                    ast = 1;
-                } else {
-                    ast = 0;
+
+"void"			 {return VOID;}
+"if"         {return IF;}
+"int"        {return INT;}
+"return"     {return RETURN;}
+"while"      {return WHILE;}
+"else"       {return ELSE;}
+
+"+"          {return MAIS;}
+"-"          {return SUB;}
+"*"          {return MULT;}
+"/"          {return DIV;}
+"="          {return IGUAL;}
+
+"<"          {return MENOR;}
+"<="	       {return MENIG;}
+">"	         {return MAIOR;}
+">="	       {return MAIIG;}
+"=="         {return IGDAD;}
+"!="         { return DIFER;}
+
+";"          {return PV;}
+","          {return VIR;}
+"("          {return APAR;}
+")"          {return FPAR;}
+"["          {return ACOL;}
+"]"          {return FCOL;}
+"{"          {return ACHAV;}
+"}"          {return FCHAV;}
+
+{numero}        {return NUM;}
+{identificador} {return ID;}
+{newline}       {lineno++;}
+{whitespace}    {/* skip whitespace */}
+"/*"             { char c;
+                  char p='\0';
+                  do
+                  { c = input();
+                    if (c == EOF) break;
+                    if (c == '\n') lineno++;
+                    if (p == '*' && c == '/') break;
+                    p = c;
+                  } while (1);
                 }
-            } while (ast != 1 || c != '/');
-        }
-
-"if"            { return IF; }
-"else"          { return ELSE; }
-"while"         { return WHILE; }
-"return"        { return RETURN; }
-"int"           { return INT; }
-"void"          { return VOID; }
-
-[ \t\r]+        { /* ignora espaços em branco */ }
-\n              { line_num++; }
-
-"=="            { return EQ; }
-"!="            { return NE; }
-"<="            { return LE; }
-">="            { return GE; }
-"<"             { return LT; }
-">"             { return GT; }
-
-"="             { return ASSIGN; }
-";"             { return SEMI; }
-","             { return COMMA; }
-"("             { return LPAREN; }
-")"             { return RPAREN; }
-"["             { return LBRACKET; }
-"]"             { return RBRACKET; }
-"{"             { return LBRACE; }
-"}"             { return RBRACE; }
-"+"             { return PLUS; }
-"-"             { return MINUS; }
-"*"             { return TIMES; }
-"/"             { return DIVIDE; }
-
-[0-9]+          { 
-                    yylval.num = atoi(yytext); 
-                    return NUM; 
-                 }
-
-[a-zA-Z][a-zA-Z0-9]* { 
-                    yylval.id = strdup(yytext);
-                    return ID;
-                  }
-
-.               { 
-                    printf("ERRO LÉXICO: %s LINHA: %d\n", yytext, line_num); 
-                  }
+.               {return ERROR;}
 
 %%
 
-/* Definição da função de erro léxico */
-void lex_error(const char *s) {
-    fprintf(stderr, "ERRO LÉXICO: %s LINHA: %d\n", s, line_num);
+TokenType getToken(void)
+{ static int firstTime = TRUE;
+  TokenType currentToken;
+  if (firstTime)
+  { firstTime = FALSE;
+    lineno++;
+    yyin = source;
+    yyout = listing;
+  }
+  currentToken = yylex();
+  strncpy(tokenString,yytext,MAXTOKENLEN);
+  return currentToken;
 }

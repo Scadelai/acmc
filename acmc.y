@@ -1,416 +1,370 @@
 %{
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include "symbol_table.h"  /* Funções da tabela de símbolos */
-#include "tree.h" /* Inclui a definição de TreeNode */
+#define YYPARSER /* distinguishes Yacc output from other code files */
 
-extern int line_num;
-extern int yylex();
-void yyerror(const char *s);
+#include "globals.h"
+#include "util.h"
+#include "scan.h"
 
-/* Função para alocar um nó da árvore */
-TreeNode *newNode(const char *name, int lineno) {
-    TreeNode *node = (TreeNode*)malloc(sizeof(TreeNode));
-    node->name = strdup(name);
-    node->lineno = lineno;
-    node->nchild = 0;
-    for (int i = 0; i < 10; i++)
-        node->child[i] = NULL;
-    return node;
-}
+#define YYSTYPE TreeNode *
+static TreeNode * savedTree; /* stores syntax tree for later return */
+static int yylex(void);
+int yyerror(char *msg);
 
-/* Função para imprimir a árvore sintática (recursivamente) */
-void printTree(TreeNode *root, int indent) {
-    if(root == NULL) return;
-    for(int i = 0; i < indent; i++) 
-        printf("  ");
-    printf("%s (linha %d)\n", root->name, root->lineno);
-    for(int i = 0; i < root->nchild; i++){
-        printTree(root->child[i], indent+1);
-    }
-}
-
-/* Ponteiro para a raiz da árvore sintática */
-TreeNode *syntaxTree = NULL;
-
-/* Protótipo da função de análise semântica */
-void semanticAnalysis(TreeNode *node, char *currentScope);
 
 %}
+%token NUM ID
+%token IF ELSE WHILE RETURN VOID
+%right INT
+%token ERROR ENDFILE
+%token MAIS SUB MULT DIV
+%token MENOR MENIG MAIOR MAIIG IGDAD DIFER IGUAL
+%token PV VIR APAR FPAR ACOL FCOL ACHAV FCHAV
 
-/* Definição dos tipos e tokens usados */
-%union {
-    int num;
-    char *id;
-    struct TreeNode *node;
-}
+%nonassoc FPAR
+%nonassoc ELSE
 
-%token <num> NUM
-%token <id> ID
-%token IF ELSE WHILE RETURN INT VOID
-%token EQ NE LE GE LT GT ASSIGN SEMI COMMA LPAREN RPAREN LBRACKET RBRACKET LBRACE RBRACE PLUS MINUS TIMES DIVIDE
+%% /* Grammar for c- */
 
-%type <node> program declaration_list declaration var_declaration type_specifier fun_declaration params param_list param compound_stmt local_declarations local_declaration statement_list statement  selection_stmt iteration_stmt return_stmt expression var simple_expression additive_expression term factor call args arg_list
+programa: declaracao_lista 
+                 { savedTree = $1;}
+            ;
 
-%%
+declaracao_lista: declaracao_lista declaracao
+          { YYSTYPE t = $1;
+              if (t != NULL){
+                while (t->sibling != NULL)
+                   t = t->sibling;
+                t->sibling = $2;
+                $$ = $1;
+              }
+              else $$ = $2;
+          }
+	      | declaracao { $$ = $1; }
+	      ;
 
-/* Gramática simplificada para C– */
-/* (Observe que esta gramática é apenas exemplificativa e não cobre todos os casos da linguagem.) */
+declaracao: var_declaracao  { $$ = $1 ;}
+	    | fun_declaracao { $$ = $1; }
+	    ;
 
-program:
-    declaration_list { syntaxTree = $1; }
-;
+var_declaracao: INT identificador PV
+          { $$ = newExpNode(TypeK);
+            $$->attr.name = "INT";
+            $$->size = 1;
+            $$->child[0] = $2;
+            $2->kind.exp =  VarK;
+            $2->type = intDType;
+          }
+	      | INT identificador ACOL numero FCOL PV
+            { $$ = newExpNode(TypeK);
+              $$->attr.name = "INT";
+              $$->size = $4->attr.val;
+              $$->child[0] = $2;
+              $2->kind.exp =  VarK;
+              $2->type = intDType;
+              $$->child[0]->child[0] = $4;
+              $4->kind.exp =  ConstK;
+            }
+	      ;
 
-declaration_list:
-    declaration { 
-        $$ = newNode("declaration_list", line_num);
-        $$->child[0] = $1;
-        $$->nchild = 1;
-    }
-    | declaration_list declaration {
-        $$ = $1;
-        $$->child[$$->nchild++] = $2;
-    }
-;
+tipo_especificador: INT
+              { $$ = newExpNode(TypeK);
+                $$->attr.name = "INT";
+                $$->type = intDType;
+                $$->size = 1;
+              }
+            | VOID
+              { $$ = newExpNode(TypeK);
+                $$->attr.name = "VOID";
+                $$->type = intDType;
+                $$->size = 1;
+              }
+            ;
 
-declaration:
-    var_declaration { $$ = $1; }
-    | fun_declaration { $$ = $1; }
-;
+fun_declaracao: INT identificador APAR params FPAR composto_decl
+            { $$ = newExpNode(TypeK);
+              $$->attr.name = "INT";
+              $$->child[0] = $2;
+              $2->kind.exp = FuncK;
+              $2->lineno = $$->lineno;
+              $2->type = intDType;
+              $2->child[0] = $4;
+              $2->child[1] = $6;
+            }
+        | VOID identificador APAR params FPAR composto_decl
+                    { $$ = newExpNode(TypeK);
+                      $$->attr.name = "VOID";
+                      $$->child[0] = $2;
+                      $2->type = voidDType;
+                      $2->kind.exp = FuncK;
+                      $2->lineno = $$->lineno;
+                      $2->child[0] = $4;
+                      $2->child[1] = $6;
+                    }
+        ;
 
-var_declaration:
-    type_specifier ID SEMI {
-        $$ = newNode("var_declaration", line_num);
-        $$->child[0] = $1; /* Tipo */
-        /* Nó para o identificador */
-        TreeNode *idNode = newNode($2, line_num);
-        $$->child[1] = idNode;
-        $$->nchild = 2;
-    }
-    | type_specifier ID LBRACKET NUM RBRACKET SEMI {
-        $$ = newNode("var_declaration_array", line_num);
-        $$->child[0] = $1;
-        TreeNode *idNode = newNode($2, line_num);
-        $$->child[1] = idNode;
-        TreeNode *numNode = newNode("NUM", line_num);
-        $$->child[2] = numNode;
-        $$->nchild = 3;
-    }
-;
+params: param_lista { $$ = $1; }
+       | VOID
+          { $$ = newExpNode(TypeK);
+            $$->attr.name = "VOID";
+            $$->size = 1;
+            $$->child[0] = NULL;
+          }
+       ;
 
-type_specifier:
-    INT { $$ = newNode("int", line_num); }
-    | VOID { $$ = newNode("void", line_num); }
-;
+param_lista: param_lista VIR param_lista
+              { YYSTYPE t = $1;
+                if (t != NULL){
+                  while (t->sibling != NULL)
+                       t = t->sibling;
+                  t->sibling = $3;
+                  $$ = $1;
+                }
+                else $$ = $3;
+              }
+           | param { $$ = $1; }
+           ;
 
-fun_declaration:
-    type_specifier ID LPAREN params RPAREN compound_stmt {
-        $$ = newNode("fun_declaration", line_num);
-        $$->child[0] = $1; /* Tipo de retorno */
-        /* Nó para o identificador da função */
-        TreeNode *idNode = newNode($2, line_num);
-        $$->child[1] = idNode;
-        $$->child[2] = $4; /* Parâmetros */
-        $$->child[3] = $6; /* Corpo da função */
-        $$->nchild = 4;
-    }
-;
+param: tipo_especificador identificador
+        { $$ = $1;
+          $$->child[0] = $2;
+          $2->kind.exp = ParamK;
 
-params:
-    param_list { $$ = $1; }
-    | VOID { $$ = newNode("params_void", line_num); }
-;
-
-param_list:
-    param { 
-        $$ = newNode("param_list", line_num); 
-        $$->child[0] = $1; 
-        $$->nchild = 1; 
-    }
-    | param_list COMMA param { 
-         $$ = $1; 
-         $$->child[$$->nchild++] = $3; 
-    }
-;
-
-param:
-    type_specifier ID { 
-        $$ = newNode("param", line_num); 
-        $$->child[0] = $1; 
-        TreeNode *idNode = newNode($2, line_num);
-        $$->child[1] = idNode;
-        $$->nchild = 2;
-    }
-    | type_specifier ID LBRACKET RBRACKET { 
-        $$ = newNode("param_array", line_num); 
-        $$->child[0] = $1; 
-        TreeNode *idNode = newNode($2, line_num);
-        $$->child[1] = idNode;
-        $$->nchild = 2;
-    }
-;
-
-compound_stmt:
-    LBRACE local_declarations statement_list RBRACE {
-        $$ = newNode("compound_stmt", line_num);
-        $$->child[0] = $2;
-        $$->child[1] = $3;
-        $$->nchild = 2;
-    }
-;
-
-local_declarations:
-    /* vazio */ { $$ = newNode("local_declarations_empty", line_num); }
-    | local_declarations local_declaration {
-        $$ = $1;
-        $$->child[$$->nchild++] = $2;
-    }
-;
-
-local_declaration:
-    type_specifier ID SEMI {
-        $$ = newNode("local_declaration", line_num);
-        $$->child[0] = $1;
-        TreeNode *idNode = newNode($2, line_num);
-        $$->child[1] = idNode;
-        $$->nchild = 2;
-    }
-    | type_specifier ID LBRACKET NUM RBRACKET SEMI {
-        $$ = newNode("local_declaration_array", line_num);
-        $$->child[0] = $1;
-        TreeNode *idNode = newNode($2, line_num);
-        $$->child[1] = idNode;
-        TreeNode *numNode = newNode("NUM", line_num);
-        $$->child[2] = numNode;
-        $$->nchild = 3;
-    }
-;
-
-statement_list:
-    /* vazio */ { $$ = newNode("statement_list_empty", line_num); }
-    | statement_list statement {
-        $$ = $1;
-        $$->child[$$->nchild++] = $2;
-    }
-;
-
-statement:
-    expression SEMI {
-        $$ = newNode("expression_stmt", line_num);
-        $$->child[0] = $1;
-        $$->nchild = 1;
-    }
-    | compound_stmt { $$ = $1; }
-    | /* Outras sentenças: seleção, iteração, return */
-      /* Para simplificar, são implementadas a seguir */
-      selection_stmt { $$ = $1; }
-    | iteration_stmt { $$ = $1; }
-    | return_stmt { $$ = $1; }
-;
-
-selection_stmt:
-    IF LPAREN expression RPAREN statement {
-        $$ = newNode("if_stmt", line_num);
-        $$->child[0] = $3;
-        $$->child[1] = $5;
-        $$->nchild = 2;
-    }
-    | IF LPAREN expression RPAREN statement ELSE statement {
-        $$ = newNode("if_else_stmt", line_num);
-        $$->child[0] = $3;
-        $$->child[1] = $5;
-        $$->child[2] = $7;
-        $$->nchild = 3;
-    }
-;
-
-iteration_stmt:
-    WHILE LPAREN expression RPAREN statement {
-        $$ = newNode("while_stmt", line_num);
-        $$->child[0] = $3;
-        $$->child[1] = $5;
-        $$->nchild = 2;
-    }
-;
-
-return_stmt:
-    RETURN SEMI {
-        $$ = newNode("return_stmt", line_num);
-        $$->nchild = 0;
-    }
-    | RETURN expression SEMI {
-        $$ = newNode("return_expr_stmt", line_num);
-        $$->child[0] = $2;
-        $$->nchild = 1;
-    }
-;
-
-expression:
-    var ASSIGN expression {
-        $$ = newNode("assign_expr", line_num);
-        $$->child[0] = $1;
-        $$->child[1] = $3;
-        $$->nchild = 2;
-    }
-    | simple_expression { $$ = $1; }
-;
-
-var:
-    ID {
-        $$ = newNode("var", line_num);
-        TreeNode *idNode = newNode($1, line_num);
-        $$->child[0] = idNode;
-        $$->nchild = 1;
-    }
-    | ID LBRACKET expression RBRACKET {
-        $$ = newNode("array_var", line_num);
-        TreeNode *idNode = newNode($1, line_num);
-        $$->child[0] = idNode;
-        $$->child[1] = $3;
-        $$->nchild = 2;
-    }
-;
-
-simple_expression:
-    additive_expression { $$ = $1; }
-    /* Outras produções (com operadores relacionais) podem ser adicionadas */
-;
-
-additive_expression:
-    term { $$ = $1; }
-    | additive_expression PLUS term {
-        $$ = newNode("add_expr_plus", line_num);
-        $$->child[0] = $1;
-        $$->child[1] = $3;
-        $$->nchild = 2;
-    }
-    | additive_expression MINUS term {
-        $$ = newNode("add_expr_minus", line_num);
-        $$->child[0] = $1;
-        $$->child[1] = $3;
-        $$->nchild = 2;
-    }
-;
-
-term:
-    factor { $$ = $1; }
-    | term TIMES factor {
-        $$ = newNode("term_times", line_num);
-        $$->child[0] = $1;
-        $$->child[1] = $3;
-        $$->nchild = 2;
-    }
-    | term DIVIDE factor {
-        $$ = newNode("term_divide", line_num);
-        $$->child[0] = $1;
-        $$->child[1] = $3;
-        $$->nchild = 2;
-    }
-;
-
-factor:
-    LPAREN expression RPAREN { $$ = $2; }
-    | var { $$ = $1; }
-    | call { $$ = $1; }
-    | NUM { $$ = newNode("NUM", line_num); }
-;
-
-call:
-    ID LPAREN args RPAREN {
-        $$ = newNode("call", line_num);
-        TreeNode *idNode = newNode($1, line_num);
-        $$->child[0] = idNode;
-        $$->child[1] = $3;
-        $$->nchild = 2;
-    }
-;
-
-args:
-    arg_list { $$ = $1; }
-    | /* vazio */ { $$ = newNode("args_empty", line_num); }
-;
-
-arg_list:
-    expression { 
-        $$ = newNode("arg_list", line_num); 
-        $$->child[0] = $1; 
-        $$->nchild = 1; 
-    }
-    | arg_list COMMA expression {
-        $$ = $1;
-        $$->child[$$->nchild++] = $3;
-    }
-;
-
-%%
-
-/* Função principal: chama o parser, imprime a árvore, realiza análise semântica e imprime a tabela de símbolos */
-int main(int argc, char **argv) {
-    if (argc > 1) {
-        FILE *f = fopen(argv[1], "r");
-        if (!f) { perror("Erro ao abrir o arquivo"); return 1; }
-        extern FILE *yyin;
-        yyin = f;
-    }
-    yyparse();
-    printf("\nÁrvore sintática:\n");
-    printTree(syntaxTree, 0);
-
-    /* Inicializa a tabela de símbolos e executa a análise semântica */
-    initSymbolTable();
-    semanticAnalysis(syntaxTree, "global");
-    printf("\nTabela de Símbolos:\n");
-    printSymbolTable();
-    freeSymbolTable();
-
-    return 0;
-}
-
-/* Função de tratamento de erros sintáticos */
-void yyerror(const char *s) {
-    fprintf(stderr, "ERRO SINTÁTICO: %s LINHA: %d\n", s, line_num);
-}
-
-/* Função de análise semântica simples:
-   - Registra declarações de variáveis, arrays, funções e parâmetros na tabela de símbolos.
-   - Verifica usos de variáveis (nó "var") se estão declaradas no escopo corrente ou global.
-*/
-void semanticAnalysis(TreeNode *node, char *currentScope) {
-    if(node == NULL) return;
-    
-    /* Registra declarações */
-    if(strcmp(node->name, "var_declaration") == 0) {
-        char *id = node->child[1]->name;
-        char *type = node->child[0]->name;
-        addSymbol(id, type, currentScope, node->lineno);
-    } else if(strcmp(node->name, "var_declaration_array") == 0) {
-        char *id = node->child[1]->name;
-        char *type = node->child[0]->name;
-        addSymbol(id, type, currentScope, node->lineno);
-    } else if(strcmp(node->name, "fun_declaration") == 0) {
-        char *id = node->child[1]->name;
-        char *type = node->child[0]->name;
-        addSymbol(id, type, "global", node->lineno);
-        /* Para os filhos dentro do corpo da função, o novo escopo é o nome da função */
-        currentScope = id;
-    } else if(strcmp(node->name, "param") == 0 ||
-              strcmp(node->name, "param_array") == 0) {
-        char *id = node->child[1]->name;
-        char *type = node->child[0]->name;
-        addSymbol(id, type, currentScope, node->lineno);
-    }
-    
-    /* Verifica usos de variável (nó "var") */
-    if(strcmp(node->name, "var") == 0) {
-        char *id = node->child[0]->name;
-        if (!existsSymbol(id, currentScope) && !existsSymbol(id, "global")) {
-            printf("ERRO SEMÂNTICO: %s não declarado LINHA: %d\n", id, node->lineno);
         }
-    }
-    
-    /* Percorre recursivamente os filhos */
-    for (int i = 0; i < node->nchild; i++) {
-        semanticAnalysis(node->child[i], currentScope);
-    }
+      | tipo_especificador identificador ACOL FCOL
+        { $$ = $1;
+          $$->size = 0;
+          $$->child[0] = $2;
+          $2->kind.exp = ParamK;
+        }
+      ;
+
+composto_decl: ACHAV local_declaracoes statement_lista FCHAV
+              { YYSTYPE t = $2;
+                  if (t != NULL){
+                    while (t->sibling != NULL)
+                       t = t->sibling;
+                    t->sibling = $3;
+                    $$ = $2;
+                  }
+                  else $$ = $3;
+              }
+             | ACHAV FCHAV {}
+             | ACHAV  local_declaracoes FCHAV { $$ = $2; }
+             | ACHAV statement_lista FCHAV { $$ = $2; }
+             ;
+
+local_declaracoes: local_declaracoes var_declaracao
+            { YYSTYPE t = $1;
+                if (t != NULL){
+                  while (t->sibling != NULL)
+                     t = t->sibling;
+                  t->sibling = $2;
+                  $$ = $1;
+                }
+                else $$ = $2;
+            }
+          | var_declaracao { $$ = $1; }
+          ;
+
+statement_lista: statement_lista statement
+            { YYSTYPE t = $1;
+              if (t != NULL){
+                while (t->sibling != NULL)
+                t = t->sibling;
+                t->sibling = $2;
+                $$ = $1;
+              }
+              else $$ = $2;
+            }
+          | statement { $$ = $1; }
+          ;
+
+statement: expressap_decl { $$ = $1; }
+     | composto_decl { $$ = $1; }
+     | selecao_decl { $$ = $1; }
+     | iteracao_decl { $$ = $1; }
+     | retorno_decl { $$ = $1; }
+     ;
+
+expressap_decl: expressao PV { $$ = $1; }
+        |  PV {}
+        ;
+
+selecao_decl:  IF APAR expressao FPAR statement
+          { $$ = newStmtNode(IfK);
+            $$->child[0] = $3;
+            $$->child[1] = $5;
+          }
+        | IF APAR expressao FPAR statement ELSE statement
+          { $$ = newStmtNode(IfK);
+            $$->child[0] = $3;
+            $$->child[1] = $5;
+            $$->child[2] = $7;
+          }
+        ;
+
+iteracao_decl: WHILE APAR expressao FPAR statement
+        { $$ = newStmtNode(WhileK);
+          $$->child[0] = $3;
+          $$->child[1] = $5;
+        }
+        ;
+
+retorno_decl: RETURN PV { $$ = newStmtNode(ReturnK); }
+            | RETURN expressao PV
+              {
+                $$ = newStmtNode(ReturnK);
+                $$->child[0] = $2;
+              }
+            ;
+
+expressao: var IGUAL expressao
+      { $$ = newStmtNode(AssignK);
+        $$->child[0] = $1;
+        $$->child[1] = $3;
+      }
+    | simples_expressao { $$ = $1; }
+    ;
+
+
+var: identificador { $$ = $1; }
+    | identificador ACOL expressao FCOL
+      { $$ = $1;
+        $$->type = intDType;
+        $$->child[0] = $3;
+      }
+    ;
+
+simples_expressao: soma_expressao relacional soma_expressao
+              {   $$ = $2;
+                  $$->child[0] = $1;
+                  $$->child[1] = $3;
+              }
+            | soma_expressao { $$ = $1; }
+            ;
+
+relacional: MENOR
+              { $$ = newExpNode(OpK);
+                $$->attr.opr = MENOR;
+              }
+           | MENIG
+              { $$ = newExpNode(OpK);
+                $$->attr.opr = MENIG;
+              }
+           | MAIOR
+              { $$ = newExpNode(OpK);
+                $$->attr.opr = MAIOR;
+              }
+           | MAIIG
+              { $$ = newExpNode(OpK);
+                $$->attr.opr = MAIIG;
+              }
+           | IGDAD
+              { $$ = newExpNode(OpK);
+                $$->attr.opr = IGDAD;
+              }
+           | DIFER
+              { $$ = newExpNode(OpK);
+                $$->attr.opr = DIFER;
+              }
+           ;
+
+soma_expressao: soma_expressao soma termo
+         { $$ = $2;
+           $$->child[0] = $1;
+           $$->child[1] = $3;
+         }
+         | termo { $$ = $1; }
+         ;
+
+soma: MAIS
+       { $$ = newExpNode(OpK);
+         $$->attr.opr = MAIS;
+       }
+     | SUB
+        { $$ = newExpNode(OpK);
+          $$->attr.opr = SUB;
+        }
+     ;
+
+termo: termo mult fator
+            { $$ = $2;
+              $$->child[0] = $1;
+              $$->child[1] = $3;
+            }
+      | fator { $$ = $1; }
+      ;
+
+mult: MULT
+       { $$ = newExpNode(OpK);
+         $$->attr.opr = MULT;
+       }
+     | DIV
+        { $$ = newExpNode(OpK);
+          $$->attr.opr = DIV;
+        }
+     ;
+
+fator: APAR expressao FPAR { $$ = $2; }
+      | var { $$ = $1; }
+      | ativacao { $$ = $1; }
+      | numero { $$ = $1; }
+      ;
+
+ativacao: identificador APAR arg_lista FPAR
+        { $$ = newExpNode(CallK);
+          $$->attr.name = $1->attr.name;
+          $$->child[0] = $3;
+        }
+        | identificador APAR FPAR
+         { $$ = newExpNode(CallK);
+           $$->attr.name = $1->attr.name;
+         }
+     ;
+
+
+arg_lista: arg_lista VIR expressao
+            { YYSTYPE t = $1;
+              if (t != NULL){
+                while (t->sibling != NULL)
+                t = t->sibling;
+                t->sibling = $3;
+                $$ = $1;
+              }
+              else $$ = $3;
+            }
+         | expressao { $$ = $1; }
+         ;
+
+identificador: ID
+                { $$ = newExpNode(IdK);
+                  $$->attr.name = copyString(tokenString);
+                }
+              ;
+
+numero: NUM      
+          { $$ = newExpNode(ConstK);
+            $$->type = intDType;
+            $$->attr.val = atoi(tokenString);
+          }
+
+%%
+
+int yyerror(char * message)
+{ fprintf(listing,"Syntax error at line %d: %s\n",lineno,message);
+  fprintf(listing,"Current token: ");
+  printToken(yychar,tokenString);
+  Error = TRUE;
+  return 0;
+}
+
+/* yylex calls getToken to make Yacc/Bison output
+ * compatible with ealier versions of the TINY scanner
+ */
+static int yylex(void)
+{ return getToken(); }
+
+TreeNode * parse(void)
+{ yyparse();
+  return savedTree;
 }
