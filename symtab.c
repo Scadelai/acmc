@@ -93,9 +93,9 @@ void st_insert(char *name, int lineno, int opr, char *scope, DataType DType, IDT
     fprintf(listing,"ERRO SEMÃNTICO: Múltiplas declarações de '%s'. LINHA: %d\n", name, lineno);
     Error = TRUE;
   } else if (l->scope != scope && (strcmp(l->scope,"global") != 0)) {
-    // procura por variável global entes de supor que não existe
+    // procura por variável global antes de supor que não existe
     while ((l != NULL)) {
-      if((strcmp(l->scope, "global")==0)&& ((strcmp( name,l->name) == 0))) {
+      if((strcmp(l->scope, "global") == 0) && ((strcmp( name, l->name) == 0))) {
         LineList t = l->lines;
         while (t->next != NULL) t = t->next;
         t->next = (LineList) malloc(sizeof(struct LineListRec));

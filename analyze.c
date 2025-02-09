@@ -146,9 +146,10 @@ static void insertNode(TreeNode *t) {
 /* Function buildSymtab constructs the symbol
  * table by preorder traversal of the syntax tree
  */
-void buildSymtab(TreeNode *syntaxTree) { 
-  st_insert("input", 0, location++, "global", intDType, fun);
-  st_insert("output", 0, location++, "global", voidDType, fun);
+void buildSymtab(TreeNode *syntaxTree) {
+  // TODO: why?
+  // st_insert("input", 0, location++, "global", intDType, fun);
+  // st_insert("output", 0, location++, "global", voidDType, fun);
   traverse(syntaxTree,insertNode,nullProc);
   typeCheck(syntaxTree);
   findMain();
