@@ -13,6 +13,6 @@
 /* Function parse returns the newly
  * constructed syntax tree
  */
-TreeNode * parse(void);
+TreeNode *parse(void);
 
 #endif
