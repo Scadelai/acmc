@@ -1,4 +1,4 @@
-$int main(void) { 
+int main(void) { 
   int x; int y;
   x = 0;
   y = 20;
@@ -9,4 +9,8 @@ $int main(void) {
     }
   }
   return 0;
+}
+
+int xesquedele(int brimbous) {
+  return brimbous;
 }

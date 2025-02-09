@@ -183,10 +183,10 @@ void printTree(TreeNode *tree) {
           fprintf(listing, "Call func: %s\n", tree->attr.name);
           break;
         case TypeK:
-          fprintf(listing, "Tipo: %s\n", tree->attr.name);
+          fprintf(listing, "Type: %s\n", tree->attr.name);
           break;
         case ParamK:
-          fprintf(listing, "Parm: %s\n", tree->attr.name);
+          fprintf(listing, "Param: %s\n", tree->attr.name);
           break;
         default:
           fprintf(listing, "Unknown ExpKNode kind\n");

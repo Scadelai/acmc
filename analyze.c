@@ -72,7 +72,7 @@ static void insertNode(TreeNode *t) {
           else {
             // achou
             // insere na tabela
-            st_insert(t->child[0]->attr.name,t->lineno,0,scope,intDType,var);
+            st_insert(t->child[0]->attr.name, t->lineno,0, scope, intDType, var);
           }
           t->child[0]->add = 1; // add linha
       }
@@ -89,7 +89,7 @@ static void insertNode(TreeNode *t) {
             else {
               //achou
               //insere
-              st_insert(t->attr.name,t->lineno,0, scope,intDType,fun);
+              st_insert(t->attr.name, t->lineno,0, scope, intDType, fun);
             }
           }
           break;
@@ -99,23 +99,23 @@ static void insertNode(TreeNode *t) {
               case  VarK:
                 if (st_lookup(t->attr.name) == -1) {
                   if (t->child[0]->child[0] == NULL) {
-                    st_insert(t->child[0]->attr.name,t->lineno,location++, scope,intDType, var);
+                    st_insert(t->child[0]->attr.name, t->lineno,location++, scope, intDType, var);
                   } else {
-                    st_insert(t->child[0]->attr.name,t->lineno,location, scope,intDType, var);
+                    st_insert(t->child[0]->attr.name, t->lineno,location, scope, intDType, var);
                     location = location + t->child[0]->child[0]->attr.val;
                   }
                 } else {
-                  st_insert(t->child[0]->attr.name,t->lineno,0, scope,intDType, var);      
+                  st_insert(t->child[0]->attr.name, t->lineno,0, scope, intDType, var);      
                 }
                 break;
               case FuncK:
                 if (st_lookup(t->attr.name) == -1) {
                   // não achou
                   // insere
-                  st_insert(t->child[0]->attr.name,t->lineno,location++, "global",t->child[0]->type,fun);
+                  st_insert(t->child[0]->attr.name, t->child[0]->lineno, location++, "global", t->child[0]->type, fun);
                 } else {
                   // achou
-                  fprintf(listing,"ERRO SEMÂNTICO: Múltiplas declarações de '%s'. LINHA: %d\n", t->child[0]->attr.name, t->lineno);
+                  fprintf(listing, "ERRO SEMÂNTICO: Múltiplas declarações de '%s'. LINHA: %d\n", t->child[0]->attr.name, t->child[0]->lineno);
                 }
                 break;
               default:

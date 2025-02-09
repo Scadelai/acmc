@@ -150,7 +150,7 @@ void printSymTab(FILE *listing) {
   int i;
   char *id, *datatypes;
   fprintf(listing, "----------------------------------------------------------------------------------------\n");
-  fprintf(listing, "Nome       Escopo      Tipo     Tipo dado   Linhas\n");
+  fprintf(listing, "Name       Scope      Type     Data Type   Lines\n");
   fprintf(listing, "----------------------------------------------------------------------------------------\n");
   
   for (i=0; i < SIZE; ++i) {

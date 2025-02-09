@@ -86,21 +86,21 @@ fun_declaracao: INT identificador APAR params FPAR composto_decl
               $$->attr.name = "INT";
               $$->child[0] = $2;
               $2->kind.exp = FuncK;
-              $2->lineno = $$->lineno;
+              // $2->lineno = $$->lineno; TODO: BUG
               $2->type = intDType;
               $2->child[0] = $4;
               $2->child[1] = $6;
             }
         | VOID identificador APAR params FPAR composto_decl
-                    { $$ = newExpNode(TypeK);
-                      $$->attr.name = "VOID";
-                      $$->child[0] = $2;
-                      $2->type = voidDType;
-                      $2->kind.exp = FuncK;
-                      $2->lineno = $$->lineno;
-                      $2->child[0] = $4;
-                      $2->child[1] = $6;
-                    }
+            { $$ = newExpNode(TypeK);
+              $$->attr.name = "VOID";
+              $$->child[0] = $2;
+              $2->kind.exp = FuncK;
+              // $2->lineno = $$->lineno; TODO: BUG
+              $2->type = voidDType;
+              $2->child[0] = $4;
+              $2->child[1] = $6;
+            }
         ;
 
 params: param_lista { $$ = $1; }
