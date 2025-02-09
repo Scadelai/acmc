@@ -52,10 +52,8 @@
  */
 typedef int TokenType;
 
-extern FILE* source; /* source code text file */
-extern FILE* listing; /* listing output text file */
-extern FILE* code; /* code text file for TM simulator */
-extern FILE* binary; /* code text file for TM simulator */
+extern FILE *source; /* source code text file */
+extern FILE *listing; /* listing output text file */
 
 extern int lineno; /* source line number for listing */
 
@@ -74,19 +72,24 @@ typedef enum {intDType, voidDType} DataType;
 
 #define MAXCHILDREN 3
 
-typedef struct treeNode
-   { struct treeNode * child[MAXCHILDREN];
-     struct treeNode * sibling;
-     int lineno;
-     int add;
-     int size;
-     NodeKind nodekind;
-     union { StmtKind stmt; ExpKind exp;} kind;
-     union { TokenType opr;
-             int val;
-             char * name; } attr;
-     DataType type; /* for type checking of exps */
-   } TreeNode;
+typedef struct treeNode {
+  struct treeNode *child[MAXCHILDREN];
+  struct treeNode *sibling;
+  int lineno;
+  int add;
+  int size;
+  NodeKind nodekind;
+  union {
+    StmtKind stmt;
+    ExpKind exp;
+  } kind;
+  union {
+    TokenType opr;
+    int val;
+    char *name;
+  } attr;
+  DataType type; /* for type checking of exps */
+} TreeNode;
 
 /* Error = TRUE prevents further passes if an error occurs */
 extern int Error;

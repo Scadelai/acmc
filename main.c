@@ -4,8 +4,8 @@
 #include "analyze.h"
 
 int lineno = 0;
-FILE* source;
-FILE* listing;
+FILE *source;
+FILE *listing;
 int Error = FALSE;
 
 int main(int argc, char *argv[]) {
@@ -40,5 +40,5 @@ int main(int argc, char *argv[]) {
   }
 
   fclose(source);
-  return EXIT_SUCCESS;
+  return 0;
 }
