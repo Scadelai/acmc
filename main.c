@@ -29,7 +29,7 @@ int main(int argc, char *argv[]) {
   }
 
   listing = stdout;
-  fprintf(listing, "\nacmc - Another C- Compiler\n");
+  fprintf(listing, "\nacmc - Another C- Compiler\n\n");
 
   syntaxTree = parse();
   fprintf(listing, "\nSyntax tree:\n\n");

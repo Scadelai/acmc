@@ -6,12 +6,13 @@
 #include "scan.h"
 
 #define YYSTYPE TreeNode *
-static TreeNode * savedTree; /* stores syntax tree for later return */
+static TreeNode *savedTree; /* stores syntax tree for later return */
 static int yylex(void);
 int yyerror(char *msg);
 
 
 %}
+
 %token NUM ID
 %token IF ELSE WHILE RETURN VOID
 %right INT
@@ -350,10 +351,8 @@ numero: NUM
 
 %%
 
-int yyerror(char * message)
-{ fprintf(listing,"Syntax error at line %d: %s\n",lineno,message);
-  fprintf(listing,"Current token: ");
-  printToken(yychar,tokenString);
+int yyerror(char *message) {
+  fprintf(listing,"ERRO SINTÁTICO: %s. LINHA: %d\n", tokenString, lineno);
   Error = TRUE;
   return 0;
 }
@@ -361,10 +360,11 @@ int yyerror(char * message)
 /* yylex calls getToken to make Yacc/Bison output
  * compatible with ealier versions of the TINY scanner
  */
-static int yylex(void)
-{ return getToken(); }
+static int yylex(void) {
+  return getToken();
+}
 
-TreeNode * parse(void)
-{ yyparse();
+TreeNode *parse(void) {
+  yyparse();
   return savedTree;
 }
