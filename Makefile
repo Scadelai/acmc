@@ -19,3 +19,6 @@ clean:
 	-rm -f lex.yy.c
 	-rm -f $(OBJS)
 	-rm -f $(BIN)
+
+check:
+	valgrind --leak-check=full ./acmc
