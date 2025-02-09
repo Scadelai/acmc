@@ -8,39 +8,37 @@ FILE* source;
 FILE* listing;
 int Error = FALSE;
 
-int main(int argc, char* argv[]) {
-    TreeNode* syntaxTree;
-    char pgm[120];
+int main(int argc, char *argv[]) {
+  TreeNode* syntaxTree;
+  char pgm[120];
 
-    if (argc != 2) {
-        fprintf(stderr, "usage: %s <filename>\n", argv[0]);
-        exit(1);
-    }
+  if (argc != 2) {
+    fprintf(stderr, "usage: %s <filename>\n", argv[0]);
+    exit(1);
+  }
 
-    strcpy(pgm, argv[1]);
-    if (strchr(pgm, '.') == NULL) {
-        strcat(pgm, ".cm");
-    }
+  strcpy(pgm, argv[1]);
+  if (strchr(pgm, '.') == NULL) {
+    strcat(pgm, ".cm");
+  }
 
-    source = fopen(pgm, "r");
-    if (source == NULL) {
-        fprintf(stderr, "File %s not found\n", pgm);
-        exit(1);
-    }
+  source = fopen(pgm, "r");
+  if (source == NULL) {
+    fprintf(stderr, "File %s not found\n", pgm);
+    exit(1);
+  }
 
-    listing = stdout;
-    fprintf(listing, "\nC- COMPILATION: %s\n", pgm);
+  listing = stdout;
+  fprintf(listing, "\nacmc - Another C- Compiler\n");
 
-    printf("\nGenerating Syntax Tree...\n");
-    syntaxTree = parse();
-    fprintf(listing, "\nSyntax tree:\n\n");
-    printTree(syntaxTree);
+  syntaxTree = parse();
+  fprintf(listing, "\nSyntax tree:\n\n");
+  printTree(syntaxTree);
 
-    if (!Error) {
-        printf("\nGenerating Symbol Table...\n");
-        buildSymtab(syntaxTree);
-    }
+  if (!Error) {
+    buildSymtab(syntaxTree);
+  }
 
-    fclose(source);
-    return 0;
+  fclose(source);
+  return EXIT_SUCCESS;
 }
