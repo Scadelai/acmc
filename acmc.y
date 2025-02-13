@@ -10,7 +10,6 @@ static TreeNode *savedTree; /* stores syntax tree for later return */
 static int yylex(void);
 int yyerror(char *msg);
 
-
 %}
 
 %token NUM ID

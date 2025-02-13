@@ -63,15 +63,15 @@ whitespace  [ \t\r]+
                     p = c;
                   } while (1);
                 }
-.               {return ERROR;}
+.               {printf("ERRO LÉXICO: %s. LINHA: %d\n", yytext, lineno); return ERROR;}
 
 %%
 
-TokenType getToken(void)
-{ static int firstTime = TRUE;
+TokenType getToken(void){
+  static int firstTime = TRUE;
   TokenType currentToken;
-  if (firstTime)
-  { firstTime = FALSE;
+  if (firstTime) {
+    firstTime = FALSE;
     lineno++;
     yyin = source;
     yyout = listing;
