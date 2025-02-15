@@ -3,40 +3,40 @@
 #include "parse.h"
 #include "analyze.h"
 
-int lineno = 0;
 FILE *source;
 FILE *listing;
+int lineno = 0;
 int Error = FALSE;
 
 int main(int argc, char *argv[]) {
-  TreeNode* syntaxTree;
-  char pgm[120];
+  TreeNode *syntax_tree;
+  char filename[50];
 
   if (argc != 2) {
-    fprintf(stderr, "usage: %s <filename>\n", argv[0]);
-    exit(1);
+    fprintf(stderr, "try: %s <filename>\n", argv[0]);
+    return 1;
   }
 
-  strcpy(pgm, argv[1]);
-  if (strchr(pgm, '.') == NULL) {
-    strcat(pgm, ".cm");
+  strcpy(filename, argv[1]);
+  if (strchr(filename, '.') == NULL) {
+    strcat(filename, ".c-");
   }
 
-  source = fopen(pgm, "r");
+  source = fopen(filename, "r");
   if (source == NULL) {
-    fprintf(stderr, "File %s not found\n", pgm);
-    exit(1);
+    fprintf(stderr, "File %s not found\n", filename);
+    return 1;
   }
 
   listing = stdout;
   fprintf(listing, "\nacmc - Another C- Compiler\n\n");
 
-  syntaxTree = parse();
+  syntax_tree = parse();
   fprintf(listing, "\nSyntax tree:\n\n");
-  printTree(syntaxTree);
+  print_tree(syntax_tree);
 
   if (!Error) {
-    buildSymtab(syntaxTree);
+    build_symbol_table(syntax_tree);
   }
 
   fclose(source);

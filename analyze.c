@@ -143,15 +143,15 @@ static void insertNode(TreeNode *t) {
   }
 }
 
-/* Function buildSymtab constructs the symbol
+/* Function build_symbol_table constructs the symbol
  * table by preorder traversal of the syntax tree
  */
-void buildSymtab(TreeNode *syntaxTree) {
+void build_symbol_table(TreeNode *syntax_tree) {
   // TODO: why?
   // st_insert("input", 0, location++, "global", intDType, fun);
   // st_insert("output", 0, location++, "global", voidDType, fun);
-  traverse(syntaxTree,insertNode,nullProc);
-  typeCheck(syntaxTree);
+  traverse(syntax_tree,insertNode,nullProc);
+  typeCheck(syntax_tree);
   findMain();
   // só faz a tabela de simbolos se não ocorreu erro antes
   if (!Error ) {
@@ -200,6 +200,6 @@ void checkNode(TreeNode *t) {
 /* Procedure typeCheck performs type checking
  * by a postorder syntax tree traversal
  */
-void typeCheck(TreeNode *syntaxTree) {
-  traverse(syntaxTree,checkNode, nullProc);
+void typeCheck(TreeNode *syntax_tree) {
+  traverse(syntax_tree,checkNode, nullProc);
 }

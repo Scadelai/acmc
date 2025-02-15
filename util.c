@@ -119,7 +119,7 @@ char *copyString(char *s) {
   return t;
 }
 
-/* Variable indentno is used by printTree to
+/* Variable indentno is used by print_tree to
  * store current number of spaces to indent
  */
 static int indentno = 0;
@@ -135,10 +135,10 @@ static void printSpaces(void) {
   }
 }
 
-/* procedure printTree prints a syntax tree to the
+/* procedure print_tree prints a syntax tree to the
  * listing file using indentation to indicate subtrees
  */
-void printTree(TreeNode *tree) {
+void print_tree(TreeNode *tree) {
   int i;
   INDENT;
   while (tree != NULL) {
@@ -196,7 +196,7 @@ void printTree(TreeNode *tree) {
       fprintf(listing,"Unknown node kind\n");
     }
     for (i = 0; i < MAXCHILDREN; i++) {
-      printTree(tree->child[i]);
+      print_tree(tree->child[i]);
     }
     tree = tree->sibling;
   }
