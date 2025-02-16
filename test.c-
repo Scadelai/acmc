@@ -1,16 +1,12 @@
-int main(void) { 
-  int x; int y;
-  x = 0;
-  y = 20;
-  while (x < y) {
-    x = x + 1;
-    if (x > 15) {
-      return x;
-    }
-  }
-  return 0;
+/* Um programa para calcular o mde
+segundo o algoritmo de Euclides. */
+int gcd (int u, int v)
+{ if (v == 0) return u;
+else return gcd (v,u-u/v*v);
+/* u-u/v* == u mod v */
 }
-
-int xesquedele(int brimbous) {
-  return brimbous;
+void main(void)
+{ int x; int y; int z;
+x = input(); y = input();
+output (gcd (x,y));
 }

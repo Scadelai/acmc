@@ -12,9 +12,9 @@ char tokenString[MAXTOKENLEN+1];
 %option noyywrap
 
 digito       [0-9]
-numero      {digito}+
+numero      {digito}{digito}*
 letra      [a-zA-Z]
-identificador  {letra}+
+identificador  {letra}{letra}*
 newline     \n
 whitespace  [ \t\r]+
 
@@ -54,17 +54,27 @@ whitespace  [ \t\r]+
 {newline}       {lineno++;}
 {whitespace}    {/* skip whitespace */}
 "/*"             { char c;
+                  int commentLine = lineno;
                   char p='\0';
                   do
                   { c = input();
-                    if (c == EOF) break;
+                    if (c == YYEOF){
+                      printf("ERRO LÉXICO: Comentário não encerrado. '/*'. LINHA: %d\n", commentLine);
+                      exit(EXIT_FAILURE);
+                    }
                     if (c == '\n') lineno++;
                     if (p == '*' && c == '/') break;
                     p = c;
                   } while (1);
                 }
-.               {printf("ERRO LÉXICO: %s. LINHA: %d\n", yytext, lineno); return ERROR;}
-
+{letra}*[0-9]+[a-zA-Z0-9]* {
+  printf("ERRO LÉXICO: identificador inválido '%s'. LINHA: %d\n", yytext, lineno);
+  exit(EXIT_FAILURE);
+}
+. {
+  printf("ERRO LÉXICO: identificador inválido '%s'. LINHA: %d\n", yytext, lineno);
+  exit(EXIT_FAILURE);
+}
 %%
 
 TokenType getToken(void){
