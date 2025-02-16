@@ -14,7 +14,7 @@ int main(int argc, char *argv[]) {
 
   // Verifica se o número de argumentos está correto
   if (argc != 2) {
-    fprintf(stderr, "Uso: %s <nome_do_arquivo>\n", argv[0]);
+    fprintf(stderr, "try: %s <filename>\n", argv[0]);
     return 1;
   }
 
@@ -28,7 +28,7 @@ int main(int argc, char *argv[]) {
   // Abre o arquivo de origem para leitura
   source = fopen(filename, "r");
   if (source == NULL) {
-    fprintf(stderr, "Arquivo %s não encontrado\n", filename);
+    fprintf(stderr, "File %s not found\n", filename);
     return 1;
   }
 
@@ -36,7 +36,7 @@ int main(int argc, char *argv[]) {
   
   // Realiza a análise sintática e imprime a árvore sintática
   syntax_tree = parse();
-  fprintf(listing, "\nÁrvore sintática:\n\n");
+  fprintf(listing, "\nSyntax tree:\n\n");
   print_tree(syntax_tree);
 
   // Se não houver erros, constrói a tabela de símbolos

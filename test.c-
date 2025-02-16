@@ -1,16 +1,16 @@
-void foo( void ) {
-    int a;
-    return 1;
+int main(void) { 
+  int x; int y;
+  x = 0;
+  y = 20;
+  while (x < y) {
+    x = x + 1;
+    if (x > 15) {
+      return x;
+    }
+  }
+  return 0;
 }
 
-int main(void) {
-  int abc;
-  int x[10];
-    if (abc > 5) {
-        return 1;
-    }
-    else {
-      x[1] = 10;
-    }
-    return 0;
+int foo(int bar) {
+  return bar;
 }

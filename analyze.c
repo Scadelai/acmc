@@ -119,6 +119,9 @@ static void insertNode(TreeNode *t) {
             st_insert(t->attr.name, t->lineno, 0, scope, 0, fun);
           }
           break;
+        case ParamK:
+          st_insert(t->attr.name,t->lineno,location++, scope,intDType, var);
+          break;
         default:
           break;
       }
