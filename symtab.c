@@ -3,67 +3,51 @@
 #include <string.h>
 #include "symtab.h"
 
-/* SIZE is the size of the hash table */
-#define SIZE 211
+#define SIZE 211   // Tamanho da tabela hash
+#define SHIFT 4    // Fator de deslocamento usado na função hash
 
-/* SHIFT is the power of two used as multiplier
-   in hash function  */
-#define SHIFT 4
-
-/* the hash function */
-static int hash (char *key) {
+// Função hash: calcula o índice da tabela hash para uma dada chave
+static int hash(char *key) {
   int temp = 0;
   int i = 0;
-
   while (key[i] != '\0') {
     temp = ((temp << SHIFT) + key[i]) % SIZE;
     ++i;
   }
-
   return temp;
 }
 
-/* the list of line numbers of the source
- * code in which a variable is referenced
- */
- typedef struct LineListRec {
+// Estrutura para armazenar os números de linha em que uma variável é referenciada
+typedef struct LineListRec {
   int lineno;
   struct LineListRec *next;
 } *LineList;
 
-/* The record in the bucket lists for
- * each variable, including name,
- * assigned memory location, and
- * the list of line numbers in which
- * it appears in the source code
- */
+// Estrutura que representa cada registro (bucket) na tabela de símbolos
 typedef struct BucketListRec {
   char *name;
   char *scope;
   DataType dTypes;
   IDType idTypes;
   LineList lines;
-  int memloc ; /* memory location for variable */
+  int memloc;
   struct BucketListRec *next;
 } *BucketList;
 
-/* the hash table */
+// Tabela hash para armazenar os registros dos identificadores
 static BucketList hashTable[SIZE];
 
-/* Procedure st_insert inserts line numbers and
- * memory locations into the symbol table
- * loc = memory location is inserted only the
- * first time, otherwise ignored
- */
-
-void st_insert(char *name, int lineno, int opr, char *scope, DataType DType, IDType idTypes ) {
+// Insere um identificador na tabela de símbolos, registrando número da linha e localização na memória
+void st_insert(char *name, int lineno, int opr, char *scope, DataType DType, IDType idTypes) {
   int h = hash(name);
-  BucketList l =  hashTable[h];
-  // última com mesmo nome
-  while ((l != NULL) && ((strcmp(name,l->name) != 0))) {
+  BucketList l = hashTable[h];
+
+  // Percorre a lista para encontrar um registro com o mesmo nome
+  while (l != NULL && strcmp(name, l->name) != 0) {
     l = l->next;
   }
-  // variable not yet in table
+
+  // Se o identificador não foi encontrado ou se certas condições são atendidas, insere um novo registro
   if (l == NULL || (opr != 0 && l->idTypes != fun && l->scope != scope)) {
     l = malloc(sizeof(struct BucketListRec));
     l->name = name;
@@ -76,54 +60,56 @@ void st_insert(char *name, int lineno, int opr, char *scope, DataType DType, IDT
     l->scope = scope;
     l->next = hashTable[h];
     hashTable[h] = l;
-  } else if (l->idTypes == fun  && idTypes == var) {
-    fprintf(listing,"ERRO SEMÂNTICO: Nome '%s' usado para declaração de função. LINHA: %d\n", name, lineno);
+  }
+  // Se o nome já foi usado para declarar uma função e agora está sendo usado para variável
+  else if (l->idTypes == fun && idTypes == var) {
+    fprintf(listing, "ERRO SEMÂNTICO: Nome '%s' usado para declaração de função. LINHA: %d\n", name, lineno);
     Error = TRUE;
-  } else if (l->scope == scope && opr != 0) {
-    fprintf(listing,"ERRO SEMÃNTICO: Múltiplas declarações de '%s'. LINHA: %d\n", name, lineno);
+  }
+  // Se o identificador já foi declarado no mesmo escopo
+  else if (l->scope == scope && opr != 0) {
+    fprintf(listing, "ERRO SEMÂNTICO: Múltiplas declarações de '%s'. LINHA: %d\n", name, lineno);
     Error = TRUE;
-  } else if (l->scope != scope && (strcmp(l->scope,"global") != 0)) {
-    // procura por variável global antes de supor que não existe
-    while ((l != NULL)) {
-      if((strcmp(l->scope, "global") == 0) && ((strcmp( name, l->name) == 0))) {
+  }
+  // Se o identificador está sendo usado em um escopo diferente e não é global, procura pela declaração global
+  else if (l->scope != scope && (strcmp(l->scope, "global") != 0)) {
+    while (l != NULL) {
+      if (strcmp(l->scope, "global") == 0 && strcmp(name, l->name) == 0) {
         LineList t = l->lines;
-        while (t->next != NULL) t = t->next;
-        t->next = (LineList) malloc(sizeof(struct LineListRec));
+        while (t->next != NULL) {
+          t = t->next;
+        }
+        t->next = (LineList)malloc(sizeof(struct LineListRec));
         t->next->lineno = lineno;
         t->next->next = NULL;
         break;
       }
       l = l->next;
     }
-
     if (l == NULL) {
-      fprintf(listing,"ERRO SEMÂNTICO: Variável '%s' não declarada. LINHA: %d\n",name, lineno);
+      fprintf(listing, "ERRO SEMÂNTICO: Variável '%s' não declarada. LINHA: %d\n", name, lineno);
       Error = TRUE;
     }
-  } else if(opr == 0) {
+  }
+  // Se opr é zero, apenas registra uma nova ocorrência (linha) do identificador
+  else if (opr == 0) {
     LineList t = l->lines;
-
     while (t->next != NULL) {
       t = t->next;
     }
-
     t->next = malloc(sizeof(struct LineListRec));
     t->next->lineno = lineno;
     t->next->next = NULL;
   }
 }
 
-/* Function st_lookup returns the memory
- * location of a variable or -1 if not found
- */
+// Procura um identificador na tabela de símbolos e retorna sua localização na memória; retorna -1 se não encontrado
 int st_lookup(char *name) {
   int h = hash(name);
-  BucketList l =  hashTable[h];
-
-  while ((l != NULL) && (strcmp(name,l->name) != 0)) {
+  BucketList l = hashTable[h];
+  while (l != NULL && strcmp(name, l->name) != 0) {
     l = l->next;
   }
-
   if (l == NULL) {
     return -1;
   } else {
@@ -131,11 +117,7 @@ int st_lookup(char *name) {
   }
 }
 
-
-/* Procedure printSymTab prints a formatted
- * listing of the symbol table contents
- * to the listing file
- */
+// Imprime a tabela de símbolos de forma formatada no arquivo de listagem
 void printSymTab(FILE *listing) {
   int i;
   char *id, *datatypes;
@@ -143,35 +125,31 @@ void printSymTab(FILE *listing) {
   fprintf(listing, "Name       Scope      Type     Data Type   Lines\n");
   fprintf(listing, "----------------------------------------------------------------------------------------\n");
   
-  for (i=0; i < SIZE; ++i) {
+  for (i = 0; i < SIZE; ++i) {
     if (hashTable[i] != NULL) {
       BucketList l = hashTable[i];
-
       while (l != NULL) {
         LineList t = l->lines;
-        fprintf(listing,"%-10s ",l->name);
-        fprintf(listing,"%-10s  ",l->scope);
-
-        if(l->idTypes == var) {
+        fprintf(listing, "%-10s ", l->name);
+        fprintf(listing, "%-10s  ", l->scope);
+        
+        if (l->idTypes == var)
           id = "var";
-        } else if (l->idTypes == fun) {
+        else if (l->idTypes == fun)
           id = "func";
-        }
-
-        if (l->dTypes == intDType) {
+        
+        if (l->dTypes == intDType)
           datatypes = "INT";
-        } else if (l->dTypes == voidDType) {
+        else if (l->dTypes == voidDType)
           datatypes = "VOID";
-        }
-
-        fprintf(listing,"%-7s  ",id);
-        fprintf(listing,"%-9s  ",datatypes);
-
+        
+        fprintf(listing, "%-7s  ", id);
+        fprintf(listing, "%-9s  ", datatypes);
+        
         while (t != NULL) {
-          fprintf(listing,"%3d ",t->lineno);
+          fprintf(listing, "%3d ", t->lineno);
           t = t->next;
         }
-
         fprintf(listing, "\n");
         l = l->next;
       }
@@ -179,6 +157,7 @@ void printSymTab(FILE *listing) {
   }
 }
 
+// Verifica se a função "main" foi declarada; emite erro se não encontrada
 void findMain(void) {
   int h = hash("main");
   BucketList l =  hashTable[h];
@@ -193,6 +172,12 @@ void findMain(void) {
   }
 }
 
+/*
+Retorna o tipo de dado de uma função dado seu nome.
+A função procura na tabela de símbolos (implementada com hash) 
+pelo registro que possui o nome especificado. Se o registro for encontrado,
+retorna o tipo de dado (dTypes) associado; caso contrário, retorna -1.
+*/
 DataType getFunType(char *nome) {
   int h = hash(nome);
   BucketList l =  hashTable[h];

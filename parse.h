@@ -3,9 +3,7 @@
 
 #include "globals.h"
 
-/* Function parse returns the newly
- * constructed syntax tree
- */
+// Função parse constrói e retorna a árvore sintática a partir do código fonte
 TreeNode *parse(void);
 
 #endif

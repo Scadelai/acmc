@@ -3,98 +3,102 @@
 #include "symtab.h"
 #include "analyze.h"
 
-char *scope = "global"; // default scope
+// Escopo atual; inicia como "global"
+char *scope = "global";
 
-/* counter for variable memory locations */
+// Contador para alocação única de endereços de variáveis
 static int location = 0;
 
-
-/* Procedure traverse is a generic recursive
- * syntax tree traversal routine:
- * it applies preProc in preorder and postProc
- * in postorder to tree pointed to by t
- */
+/*
+Função recursiva para percorrer a árvore sintática.
+Aplica as funções preProc (pré-ordem) e postProc (pós-ordem) em cada nó.
+*/
 static void traverse(TreeNode *t, void (*preProc)(TreeNode *), void (*postProc)(TreeNode *)) {
   if (t != NULL) {
+    // Se o primeiro filho for uma declaração de função, atualiza o escopo
     if (t->child[0] != NULL && t->child[0]->kind.exp == FuncK) {
       scope = t->child[0]->attr.name;
     }
 
     preProc(t);
 
+    // Percorre todos os filhos do nó atual
     for (int i = 0; i < MAXCHILDREN; i++) {
       traverse(t->child[i], preProc, postProc);
     }
 
+    // Ao finalizar a função, retorna o escopo para "global"
     if (t->child[0] != NULL && t->child[0]->kind.exp == FuncK) {
       scope = "global";
     }
 
     postProc(t);
+
+    // Percorre os nós irmãos
     traverse(t->sibling, preProc, postProc);
   }
 }
 
-
-/* nullProc is a do-nothing procedure to
- * generate preorder-only or postorder-only
- * traversals from traverse
- */
+// Função nula utilizada para travessias onde não se deseja realizar nenhuma operação.
 static void nullProc(TreeNode *t) {
-  if (t==NULL) {
-    return;
-  } else {
-    return;
-  }
+  return;
 }
 
-/* Procedure insertNode inserts
- * identifiers stored in t into
- * the symbol table
- */
+/*
+Insere os identificadores da árvore sintática na tabela de símbolos.
+Realiza verificações para detectar declarações múltiplas ou usos indevidos.
+*/
 static void insertNode(TreeNode *t) {
   switch (t->nodekind) {
     case StmtK:
+      // Processa atribuições
       if (t->kind.stmt == AssignK) {
-          if (st_lookup(t->child[0]->attr.name) == -1){
-            fprintf(listing,"ERRO SEMÂNTICO: Variável '%s' não declarada. LINHA: %d\n", t->child[0]->attr.name, t->lineno);
+        // Verifica se a variável foi declarada
+        if (st_lookup(t->child[0]->attr.name) == -1) {
+          fprintf(listing, "ERRO SEMÂNTICO: Variável '%s' não declarada. LINHA: %d\n", t->child[0]->attr.name, t->lineno);
           Error = TRUE;
-          }
-          else {
-            st_insert(t->child[0]->attr.name, t->lineno,0, scope, intDType, var);
+        } else {
+          // Insere a variável na tabela de símbolos
+          st_insert(t->child[0]->attr.name, t->lineno, 0, scope, intDType, var);
         }
-          t->child[0]->add = 1;
+        // Marca que a variável já foi processada
+        t->child[0]->add = 1;
       }
       break;
+
     case ExpK:
       switch(t->kind.exp) {
         case IdK:
-          if (t->add != 1){
+          // Se o nó não foi marcado como já adicionado
+          if (t->add != 1) {
+            // Verifica se o identificador foi declarado
             if (st_lookup(t->attr.name) == -1) {
-              fprintf(listing,"ERRO SEMÂNTICO: Variável '%s' não declarada. LINHA: %d\n", t->attr.name, t->lineno);
+              fprintf(listing, "ERRO SEMÂNTICO: Variável '%s' não declarada. LINHA: %d\n", t->attr.name, t->lineno);
               Error = TRUE;
-            }
-            else {
-              st_insert(t->attr.name, t->lineno,0, scope, intDType, fun);
+            } else {
+              // Insere o identificador (como função) na tabela
+              st_insert(t->attr.name, t->lineno, 0, scope, intDType, fun);
             }
           }
           break;
         case TypeK:
           if (t->child[0] != NULL) {
             switch (t->child[0]->kind.exp) {
-              case  VarK:
+              case VarK:
+                // Insere a variável se ainda não foi declarada
                 if (st_lookup(t->attr.name) == -1) {
                   if (t->child[0]->child[0] == NULL) {
-                    st_insert(t->child[0]->attr.name, t->lineno,location++, scope, intDType, var);
+                    st_insert(t->child[0]->attr.name, t->lineno, location++, scope, intDType, var);
                   } else {
-                    st_insert(t->child[0]->attr.name, t->lineno,location, scope, intDType, var);
+                    st_insert(t->child[0]->attr.name, t->lineno, location, scope, intDType, var);
                     location = location + t->child[0]->child[0]->attr.val;
                   }
                 } else {
-                  st_insert(t->child[0]->attr.name, t->lineno,0, scope, intDType, var);      
+                  st_insert(t->child[0]->attr.name, t->lineno, 0, scope, intDType, var);
                 }
                 break;
               case FuncK:
+                // Insere a função na tabela se não houver declarações duplicadas
                 if (st_lookup(t->attr.name) == -1) {
                   st_insert(t->child[0]->attr.name, t->child[0]->lineno, location++, "global", t->child[0]->type, fun);
                 } else {
@@ -107,11 +111,12 @@ static void insertNode(TreeNode *t) {
           }
           break;
         case CallK:
+          // Verifica se a função foi declarada, exceto funções pré-definidas "input" e "output"
           if (st_lookup(t->attr.name) == -1 && strcmp(t->attr.name, "input") != 0 && strcmp(t->attr.name, "output") != 0) {
-            fprintf(listing,"ERRO SEMÂNTICO: Função '%s' não declarada. LINHA: %d\n", t->attr.name, t->lineno);
+            fprintf(listing, "ERRO SEMÂNTICO: Função '%s' não declarada. LINHA: %d\n", t->attr.name, t->lineno);
             Error = TRUE;
           } else {
-            st_insert(t->attr.name,t->lineno,0, scope,0,fun);
+            st_insert(t->attr.name, t->lineno, 0, scope, 0, fun);
           }
           break;
         default:
@@ -123,35 +128,48 @@ static void insertNode(TreeNode *t) {
   }
 }
 
-/* Function build_symbol_table constructs the symbol
- * table by preorder traversal of the syntax tree
- */
+/*
+Constrói a tabela de símbolos a partir da árvore sintática.
+Insere funções pré-definidas, percorre a árvore para inserir nós, realiza a verificação de tipos
+e exibe a tabela caso não haja erros semânticos.
+*/
 void build_symbol_table(TreeNode *syntax_tree) {
+  // Insere funções pré-definidas na tabela de símbolos
   st_insert("input", 0, location++, "global", intDType, fun);
   st_insert("output", 0, location++, "global", voidDType, fun);
-  traverse(syntax_tree,insertNode,nullProc);
+
+  // Percorre a árvore inserindo os nós na tabela de símbolos
+  traverse(syntax_tree, insertNode, nullProc);
+
+  // Realiza a verificação de tipos na árvore
   typeCheck(syntax_tree);
+
+  // Verifica a existência da função main (ou similar)
   findMain();
-  // só faz a tabela de simbolos se não ocorreu erro antes
-  if (!Error ) {
-    fprintf(listing,"\nSymbol table:\n\n");
+
+  // Se não houver erros, imprime a tabela de símbolos
+  if (!Error) {
+    fprintf(listing, "\nSymbol table:\n\n");
     printSymTab(listing);
   }
 }
 
+// Registra um erro de tipo, exibindo mensagem e linha correspondente.
 static void typeError(TreeNode *t, char *message) {
-  fprintf(listing,"ERRO SEMÂNTICO: Erro de tipo: %s'. LINHA: %d\n", message, t->lineno);
+  fprintf(listing, "ERRO SEMÂNTICO: Erro de tipo: %s. LINHA: %d\n", message, t->lineno);
   Error = TRUE;
 }
 
-/* Procedure checkNode performs
- * type checking at a single tree node
- */
+/*
+Realiza a verificação de tipos em um nó específico da árvore.
+Verifica, por exemplo, se uma função do tipo void é utilizada de maneira incorreta.
+*/
 void checkNode(TreeNode *t) {
-  switch (t->nodekind) { 
+  switch (t->nodekind) {
     case ExpK:
       switch (t->kind.exp) {
         case OpK:
+        // Se algum dos operandos for o resultado de uma chamada de função void, gera erro
           if (((t->child[0]->kind.exp == CallK) &&( getFunType(t->child[0]->attr.name)) == voidDType) || ((t->child[1]->kind.exp == CallK) && (getFunType(t->child[1]->attr.name) == voidDType))) {
             typeError(t->child[0], "Operando com função VOID");
           }
@@ -163,6 +181,7 @@ void checkNode(TreeNode *t) {
     case StmtK:
       switch (t->kind.stmt) {
         case AssignK:
+          // Impede que o resultado de uma função void seja atribuído
           if (t->child[1]->kind.exp == CallK && getFunType(t->child[1]->attr.name) == voidDType) {
             typeError(t->child[1], "Função tipo VOID sendo atribuída");
           }
@@ -176,9 +195,9 @@ void checkNode(TreeNode *t) {
   }
 }
 
-/* Procedure typeCheck performs type checking
- * by a postorder syntax tree traversal
- */
+/*
+Inicia a verificação de tipos na árvore sintática utilizando uma travessia pós-ordem.
+*/
 void typeCheck(TreeNode *syntax_tree) {
-  traverse(syntax_tree,checkNode, nullProc);
+  traverse(syntax_tree, checkNode, nullProc);
 }

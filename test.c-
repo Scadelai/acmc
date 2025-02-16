@@ -1,4 +1,4 @@
-int foo( void ) {
+void foo( void ) {
     int a;
     return 1;
 }

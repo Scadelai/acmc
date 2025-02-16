@@ -1,29 +1,19 @@
 #ifndef _UTIL_H_
 #define _UTIL_H_
 
-/* Procedure printToken prints a token
- * and its lexeme to the listing file
- */
+// Imprime um token e seu lexema no arquivo de listagem
 void printToken(TokenType, const char *);
 
-/* Function newStmtNode creates a new statement
- * node for syntax tree construction
- */
+// Cria e retorna um novo nó de declaração para a árvore sintática
 TreeNode *newStmtNode(StmtKind);
 
-/* Function newExpNode creates a new expression
- * node for syntax tree construction
- */
+// Cria e retorna um novo nó de expressão para a árvore sintática
 TreeNode *newExpNode(ExpKind);
 
-/* Function copyString allocates and makes a new
- * copy of an existing string
- */
+// Cria uma cópia de uma string, alocando a memória necessária para ela
 char *copyString(char *);
 
-/* procedure print_tree prints a syntax tree to the
- * listing file using indentation to indicate subtrees
- */
+// Imprime a árvore sintática no arquivo de listagem utilizando indentação para indicar a hierarquia
 void print_tree(TreeNode *);
 
 #endif

@@ -10,7 +10,7 @@ int Error = FALSE;
 
 int main(int argc, char *argv[]) {
   TreeNode *syntax_tree;
-  char filename[50];
+  char filename[100];
 
   if (argc != 2) {
     fprintf(stderr, "try: %s <filename>\n", argv[0]);
@@ -29,8 +29,7 @@ int main(int argc, char *argv[]) {
   }
 
   listing = stdout;
-  fprintf(listing, "\nacmc - Another C- Compiler\n\n");
-
+  
   syntax_tree = parse();
   fprintf(listing, "\nSyntax tree:\n\n");
   print_tree(syntax_tree);

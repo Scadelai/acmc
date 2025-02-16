@@ -6,27 +6,15 @@
 #include <ctype.h>
 #include <string.h>
 
-/* Yacc/Bison generates internally its own values
- * for the tokens. Other files can access these values
- * by including the tab.h file generated using the
- * Yacc/Bison option -d ("generate header")
- *
- * The YYPARSER flag prevents inclusion of the tab.h
- * into the Yacc/Bison output itself
- */
-
+// Verifica se o compilador do Yacc/Bison está definindo YYPARSER; se não, inclui o cabeçalho gerado
 #ifndef YYPARSER
+#include "acmc.tab.h"  // Cabeçalho gerado pelo Yacc/Bison
 
-/* the name of the following file may change */
-#include "acmc.tab.h"
-
-/* ENDFILE is implicitly defined by Yacc/Bison,
- * and not included in the tab.h file
- */
+// Define ENDFILE para indicar o fim do arquivo (não incluído automaticamente pelo Yacc/Bison)
 #define ENDFILE 0
-
 #endif
 
+// Define os valores booleanos FALSE e TRUE, caso não estejam definidos
 #ifndef FALSE
 #define FALSE 0
 #endif
@@ -35,55 +23,61 @@
 #define TRUE 1
 #endif
 
-/* MAXRESERVED = the number of reserved words */
+// Número máximo de palavras reservadas na linguagem
 #define MAXRESERVED 8
 
-/* Yacc/Bison generates its own integer values
- * for tokens
- */
+// Tipo de token utilizado pelo Yacc/Bison
 typedef int TokenType;
 
-extern FILE *source; /* source code text file */
-extern FILE *listing; /* listing output text file */
+// Ponteiros para os arquivos de código fonte e de listagem de saída
+extern FILE *source;   // Arquivo de código fonte
+extern FILE *listing;  // Arquivo de saída para listagem
 
-extern int lineno; /* source line number for listing */
+// Número da linha atual do código fonte para relatórios
+extern int lineno;
 
 /**************************************************/
-/***********   Syntax tree for parsing ************/
+/********** Árvore Sintática para Parsing ********/
 /**************************************************/
 
+// Tipos de nós na árvore sintática: declaração (StmtK) ou expressão (ExpK)
 typedef enum {StmtK, ExpK} NodeKind;
-typedef enum {IfK, WhileK, AssignK, ReturnK} StmtKind;
-typedef enum {OpK, ConstK, IdK, VarK, TypeK, ParamK, FuncK, CallK, ArrayAccessK} ExpKind;
 
-/* ExpType is used for type checking */
-typedef enum {Void,Integer,Boolean} ExpType;
+// Tipos de declarações
+typedef enum {IfK, WhileK, AssignK, ReturnK} StmtKind;
+
+// Tipos de expressões
+typedef enum {OpK, ConstK, IdK, VarK, TypeK, ParamK, FuncK, CallK} ExpKind;
+
+// Tipos de dados para verificação de tipos em expressões
+typedef enum {Void, Integer, Boolean} ExpType;
 typedef enum {fun, var} IDType;
 typedef enum {intDType, voidDType} DataType;
 
+// Número máximo de filhos para cada nó na árvore sintática
 #define MAXCHILDREN 3
 
+// Estrutura do nó da árvore sintática
 typedef struct treeNode {
-  struct treeNode *child[MAXCHILDREN];
-  struct treeNode *sibling;
-  int lineno;
-  int add;
-  int size;
-  NodeKind nodekind;
+  struct treeNode *child[MAXCHILDREN];  // Ponteiros para os nós filhos
+  struct treeNode *sibling;             // Ponteiro para o nó irmão
+  int lineno;                           // Número da linha do código fonte
+  int add;                              // Indicador para marcação (uso interno)
+  int size;                             // Tamanho (uso específico)
+  NodeKind nodekind;                    // Tipo do nó (StmtK ou ExpK)
   union {
-    StmtKind stmt;
-    ExpKind exp;
+    StmtKind stmt;                      // Tipo de declaração, se aplicável
+    ExpKind exp;                        // Tipo de expressão, se aplicável
   } kind;
   union {
-    TokenType opr;
-    int val;
-    char *name;
+    TokenType opr;                      // Operador (para expressões)
+    int val;                            // Valor constante
+    char *name;                         // Nome do identificador
   } attr;
-  DataType type; /* for type checking of exps */
+  DataType type;                        // Tipo de dado para verificação de tipos
 } TreeNode;
 
-/* Error = TRUE prevents further passes if an error occurs */
+// Flag global que indica se ocorreu algum erro; se TRUE, interrompe as próximas análises
 extern int Error;
-
 
 #endif

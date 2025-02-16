@@ -3,33 +3,23 @@
 
 #include "globals.h"
 
+// Insere um identificador na tabela de símbolos, registrando a linha e a localização de memória
+void st_insert(char *name, int lineno, int loc, char *scope, DataType dTypes, IDType idTypes);
 
-/* Procedure st_insert inserts line numbers and
- * memory locations into the symbol table
- * loc = memory location is inserted only the
- * first time, otherwise ignored
- */
-void st_insert(char *name, int lineno, int loc, char *scope, DataType dTypes, IDType idTypes );
-
-/* Function st_lookup returns the memory
- * location of a variable or -1 if not found
- */
+// Retorna a localização de memória de um identificador; retorna -1 se não encontrado
 int st_lookup(char *name);
 
+// Retorna a localização de uma variável estática com base no nome e escopo
+// Retorna -1 se não encontrado ou -2 se for uma variável dinâmica
+int st_lookup2(char *name, char *scope);
 
-/* returns location of static variable
- * based on name and scope
- * or -1 if not found,
- * or -2 if a dynamic variable
-*/
-int st_lookup2(char *name, char *scope );
-
-/* Procedure printSymTab prints a formatted
- * listing of the symbol table contents
- * to the listing file
- */
+// Imprime a tabela de símbolos formatada no arquivo de listagem
 void printSymTab(FILE *listing);
 
+// Verifica se a função MAIN foi declarada na tabela de símbolos
 void findMain(void);
+
+// Retorna o tipo de dado de uma função com base no nome
 DataType getFunType(char *nome);
+
 #endif
