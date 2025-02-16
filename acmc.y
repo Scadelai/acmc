@@ -1,17 +1,17 @@
 %{
-#define YYPARSER /* distinguishes Yacc output from other code files */
+#define YYPARSER // Define para distinguir a saída do Yacc de outros arquivos
 
 #include "globals.h"
 #include "util.h"
 #include "scan.h"
 
 #define YYSTYPE TreeNode *
-static TreeNode *savedTree; /* stores syntax tree for later return */
+static TreeNode *savedTree; // Árvore de sintaxe abstrata gerada pelo parser
 static int yylex(void);
 int yyerror(char *msg);
-
 %}
 
+/* Tokens utilizados na gramática */
 %token NUM ID
 %token IF ELSE WHILE RETURN VOID
 %right INT
@@ -23,14 +23,18 @@ int yyerror(char *msg);
 %nonassoc FPAR
 %nonassoc ELSE
 
-%% /* Grammar for c- */
+%%
+// Gramática da linguagem C-
 
 programa: declaracao_lista 
-                 { savedTree = $1;}
-            ;
+           { savedTree = $1; } // Salva a árvore sintática gerada
+           ;
 
+/* Lista de declarações */
 declaracao_lista: declaracao_lista declaracao
-          { YYSTYPE t = $1;
+           { 
+              // Concatena declarações em uma lista encadeada
+              YYSTYPE t = $1;
               if (t != NULL){
                 while (t->sibling != NULL)
                    t = t->sibling;
@@ -38,137 +42,172 @@ declaracao_lista: declaracao_lista declaracao
                 $$ = $1;
               }
               else $$ = $2;
-          }
-	      | declaracao { $$ = $1; }
-	      ;
+           }
+          | declaracao { $$ = $1; }
+          ;
 
-declaracao: var_declaracao  { $$ = $1 ;}
-	    | fun_declaracao { $$ = $1; }
-	    ;
+/* Declaração pode ser de variável ou de função */
+declaracao: var_declaracao  { $$ = $1; }
+          | fun_declaracao  { $$ = $1; }
+          ;
 
+/* Declaração de variável: simples ou vetor */
 var_declaracao: INT identificador PV
-          { $$ = newExpNode(TypeK);
-            $$->attr.name = "INT";
-            $$->size = 1;
-            $$->child[0] = $2;
-            $2->kind.exp =  VarK;
-            $2->type = intDType;
-          }
-	      | INT identificador ACOL numero FCOL PV
-            { $$ = newExpNode(TypeK); 
+           { 
+              // Declaração de variável simples
+              $$ = newExpNode(TypeK);
+              $$->attr.name = "INT";
+              $$->size = 1;
+              $$->child[0] = $2;
+              $2->kind.exp = VarK;
+              $2->type = intDType;
+           }
+          | INT identificador ACOL numero FCOL PV
+           { 
+              // Declaração de vetor (array)
+              $$ = newExpNode(TypeK); 
               $$->attr.name = "INT";
               $$->size = $4->attr.val;
               $$->child[0] = $2;
-              $2->kind.exp =  VarK;
+              $2->kind.exp = VarK;
               $2->type = intDType;
               $$->child[0]->child[0] = $4;
-              $4->kind.exp =  ConstK;
-            }
-	      ;
+              $4->kind.exp = ConstK;
+           }
+          ;
 
+/* Especificador de tipo: INT ou VOID */
 tipo_especificador: INT
-              { $$ = newExpNode(TypeK);
-                $$->attr.name = "INT";
-                $$->type = intDType;
-                $$->size = 1;
-              }
-            | VOID
-              { $$ = newExpNode(TypeK);
-                $$->attr.name = "VOID";
-                $$->type = voidDType;
-                $$->size = 1;
-              }
-            ;
+           { 
+              // Tipo INT
+              $$ = newExpNode(TypeK);
+              $$->attr.name = "INT";
+              $$->type = intDType;
+              $$->size = 1;
+           }
+         | VOID
+           { 
+              // Tipo VOID
+              $$ = newExpNode(TypeK);
+              $$->attr.name = "VOID";
+              $$->type = voidDType;
+              $$->size = 1;
+           }
+         ;
 
+/* Declaração de função: retorno INT ou VOID */
 fun_declaracao: INT identificador APAR params FPAR composto_decl
-            { $$ = newExpNode(TypeK);
+           { 
+              // Função com retorno INT
+              $$ = newExpNode(TypeK);
               $$->attr.name = "INT";
               $$->child[0] = $2;
               $2->kind.exp = FuncK;
               $2->type = intDType;
-              $2->child[0] = $4;
-              $2->child[1] = $6;
-            }
-        | VOID identificador APAR params FPAR composto_decl
-            { $$ = newExpNode(TypeK);
+              $2->child[0] = $4; // Parâmetros
+              $2->child[1] = $6; // Corpo da função
+           }
+         | VOID identificador APAR params FPAR composto_decl
+           { 
+              // Função com retorno VOID
+              $$ = newExpNode(TypeK);
               $$->attr.name = "VOID";
               $$->child[0] = $2;
               $2->kind.exp = FuncK;
               $2->type = voidDType;
-              $2->child[0] = $4;
-              $2->child[1] = $6;
-            }
-        ;
+              $2->child[0] = $4; // Parâmetros
+              $2->child[1] = $6; // Corpo da função
+           }
+         ;
 
+/* Parâmetros: lista de parâmetros ou VOID indicando ausência de parâmetros */
 params: param_lista { $$ = $1; }
        | VOID
-          { $$ = newExpNode(TypeK);
+         { 
+            // Função sem parâmetros
+            $$ = newExpNode(TypeK);
             $$->attr.name = "VOID";
             $$->size = 1;
             $$->child[0] = NULL;
-          }
+         }
        ;
 
+/* Lista de parâmetros separados por vírgula */
 param_lista: param_lista VIR param
-              { YYSTYPE t = $1;
-                if (t != NULL){
-                  while (t->sibling != NULL)
-                       t = t->sibling;
-                  t->sibling = $3;
-                  $$ = $1;
-                }
-                else $$ = $3;
+           { 
+              // Adiciona novo parâmetro à lista
+              YYSTYPE t = $1;
+              if (t != NULL){
+                while (t->sibling != NULL)
+                   t = t->sibling;
+                t->sibling = $3;
+                $$ = $1;
               }
-           | param { $$ = $1; }
-           ;
+              else $$ = $3;
+           }
+         | param { $$ = $1; }
+         ;
 
+/* Declaração de parâmetro: simples ou vetor */
 param: tipo_especificador identificador
-        { $$ = $1;
+       { 
+          // Parâmetro simples
+          $$ = $1;
           $$->child[0] = $2;
           $2->kind.exp = ParamK;
-
-        }
-      | tipo_especificador identificador ACOL FCOL
-        { $$ = $1;
+       }
+     | tipo_especificador identificador ACOL FCOL
+       { 
+          // Parâmetro do tipo vetor (array)
+          $$ = $1;
           $$->size = 0;
           $$->child[0] = $2;
           $2->kind.exp = ParamK;
-        }
-      ;
+       }
+     ;
 
+/* Declaração composta: bloco de declarações e/ou comandos */
 composto_decl: ACHAV local_declaracoes statement_lista FCHAV
-              { YYSTYPE t = $2;
-                  if (t != NULL){
-                    while (t->sibling != NULL)
-                       t = t->sibling;
-                    t->sibling = $3;
-                    $$ = $2;
-                  }
-                  else $$ = $3;
+              { 
+                 // Combina declarações locais e comandos
+                 YYSTYPE t = $2;
+                 if (t != NULL){
+                   while (t->sibling != NULL)
+                      t = t->sibling;
+                   t->sibling = $3;
+                   $$ = $2;
+                 }
+                 else $$ = $3;
               }
-             | ACHAV FCHAV { $$ = NULL; }
-             | ACHAV local_declaracoes FCHAV { $$ = $2; }
-             | ACHAV statement_lista FCHAV { $$ = $2; }
+             | ACHAV FCHAV { $$ = NULL; } // Bloco vazio
+             | ACHAV local_declaracoes FCHAV { $$ = $2; } // Apenas declarações
+             | ACHAV statement_lista FCHAV { $$ = $2; } // Apenas comandos
              ;
 
+/* Declarações locais dentro de um bloco */
 local_declaracoes: local_declaracoes var_declaracao
-            { YYSTYPE t = $1;
-                if (t != NULL){
-                  while (t->sibling != NULL)
-                     t = t->sibling;
-                  t->sibling = $2;
-                  $$ = $1;
-                }
-                else $$ = $2;
+            { 
+               // Adiciona declaração de variável à lista local
+               YYSTYPE t = $1;
+               if (t != NULL){
+                 while (t->sibling != NULL)
+                    t = t->sibling;
+                 t->sibling = $2;
+                 $$ = $1;
+               }
+               else $$ = $2;
             }
           | var_declaracao { $$ = $1; }
           ;
 
+/* Lista de comandos (statements) */
 statement_lista: statement_lista statement
-            { YYSTYPE t = $1;
+            { 
+              // Concatena comandos na lista
+              YYSTYPE t = $1;
               if (t != NULL){
                 while (t->sibling != NULL)
-                t = t->sibling;
+                  t = t->sibling;
                 t->sibling = $2;
                 $$ = $1;
               }
@@ -177,191 +216,275 @@ statement_lista: statement_lista statement
           | statement { $$ = $1; }
           ;
 
+/* Comandos: expressão, bloco, seleção, iteração ou retorno */
 statement: expressao_decl { $$ = $1; }
-     | composto_decl { $$ = $1; }
-     | selecao_decl { $$ = $1; }
-     | iteracao_decl { $$ = $1; }
-     | retorno_decl { $$ = $1; }
-     ;
+         | composto_decl { $$ = $1; }
+         | selecao_decl { $$ = $1; }
+         | iteracao_decl { $$ = $1; }
+         | retorno_decl { $$ = $1; }
+         ;
 
+/* Declaração de expressão, que pode ser vazia */
 expressao_decl: expressao PV { $$ = $1; }
-        |  PV {}
-        ;
+              | PV { /* Comando vazio */ }
+              ;
 
-selecao_decl:  IF APAR expressao FPAR statement
-          { $$ = newStmtNode(IfK);
-            $$->child[0] = $3;
-            $$->child[1] = $5;
-          }
-        | IF APAR expressao FPAR statement ELSE statement
-          { $$ = newStmtNode(IfK);
-            $$->child[0] = $3;
-            $$->child[1] = $5;
-            $$->child[2] = $7;
-          }
-        ;
+/* Comando de seleção: if ou if-else */
+selecao_decl: IF APAR expressao FPAR statement
+              { 
+                // Comando if sem else
+                $$ = newStmtNode(IfK);
+                $$->child[0] = $3; // condição
+                $$->child[1] = $5; // comando se verdadeiro
+              }
+            | IF APAR expressao FPAR statement ELSE statement
+              { 
+                // Comando if com else
+                $$ = newStmtNode(IfK);
+                $$->child[0] = $3; // condição
+                $$->child[1] = $5; // comando se verdadeiro
+                $$->child[2] = $7; // comando se falso
+              }
+            ;
 
+/* Comando de iteração: while */
 iteracao_decl: WHILE APAR expressao FPAR statement
-        { $$ = newStmtNode(WhileK);
-          $$->child[0] = $3;
-          $$->child[1] = $5;
-        }
-        ;
+              { 
+                // Comando while
+                $$ = newStmtNode(WhileK);
+                $$->child[0] = $3; // condição
+                $$->child[1] = $5; // comando do loop
+              }
+              ;
 
-retorno_decl: RETURN PV { $$ = newStmtNode(ReturnK); }
+/* Comando de retorno: com ou sem valor */
+retorno_decl: RETURN PV 
+              { 
+                // Retorno sem valor
+                $$ = newStmtNode(ReturnK); 
+              }
             | RETURN expressao PV
-              {
+              { 
+                // Retorno com valor
                 $$ = newStmtNode(ReturnK);
                 $$->child[0] = $2;
               }
             ;
 
+/* Expressão: atribuição ou expressão simples */
 expressao: var IGUAL expressao
-      { $$ = newStmtNode(AssignK);
-        $$->child[0] = $1;
-        $$->child[1] = $3;
-      }
-    | simples_expressao { $$ = $1; }
-    ;
+           { 
+             // Atribuição
+             $$ = newStmtNode(AssignK);
+             $$->child[0] = $1; // variável
+             $$->child[1] = $3; // expressão atribuída
+           }
+         | simples_expressao { $$ = $1; }
+         ;
 
-
-var: identificador { $$ = $1; }
+/* Variável: simples ou acesso a vetor */
+var: identificador 
+       { $$ = $1; }
     | identificador ACOL expressao FCOL
-      { $$ = $1;
-        $$->type = intDType;
-        $$->child[0] = $3;
-      }
+       { 
+         // Acesso a vetor (array)
+         $$ = $1;
+         $$->type = intDType;
+         $$->child[0] = $3; // índice
+       }
     ;
 
+/* Expressão simples: com ou sem operador relacional */
 simples_expressao: soma_expressao relacional soma_expressao
-              {   $$ = $2;
-                  $$->child[0] = $1;
-                  $$->child[1] = $3;
-              }
-            | soma_expressao { $$ = $1; }
-            ;
+                   { 
+                     // Expressão com operador relacional
+                     $$ = $2;
+                     $$->child[0] = $1;
+                     $$->child[1] = $3;
+                   }
+                 | soma_expressao { $$ = $1; }
+                 ;
 
+/* Operadores relacionais */
 relacional: MENOR
-              { $$ = newExpNode(OpK);
+              { 
+                // Operador '<'
+                $$ = newExpNode(OpK);
                 $$->attr.opr = MENOR;
               }
            | MENIG
-              { $$ = newExpNode(OpK);
+              { 
+                // Operador '<='
+                $$ = newExpNode(OpK);
                 $$->attr.opr = MENIG;
               }
            | MAIOR
-              { $$ = newExpNode(OpK);
+              { 
+                // Operador '>'
+                $$ = newExpNode(OpK);
                 $$->attr.opr = MAIOR;
               }
            | MAIIG
-              { $$ = newExpNode(OpK);
+              { 
+                // Operador '>='
+                $$ = newExpNode(OpK);
                 $$->attr.opr = MAIIG;
               }
            | IGDAD
-              { $$ = newExpNode(OpK);
+              { 
+                // Operador '=='
+                $$ = newExpNode(OpK);
                 $$->attr.opr = IGDAD;
               }
            | DIFER
-              { $$ = newExpNode(OpK);
+              { 
+                // Operador '!='
+                $$ = newExpNode(OpK);
                 $$->attr.opr = DIFER;
               }
            ;
 
+/* Expressão de soma/subtração */
 soma_expressao: soma_expressao soma termo
-         { $$ = $2;
-           $$->child[0] = $1;
-           $$->child[1] = $3;
-         }
-         | termo { $$ = $1; }
-         ;
+                { 
+                  // Operação de adição ou subtração
+                  $$ = $2;
+                  $$->child[0] = $1;
+                  $$->child[1] = $3;
+                }
+              | termo { $$ = $1; }
+              ;
 
+/* Operadores '+' e '-' */
 soma: MAIS
-       { $$ = newExpNode(OpK);
+       { 
+         // Operador '+'
+         $$ = newExpNode(OpK);
          $$->attr.opr = MAIS;
        }
      | SUB
-        { $$ = newExpNode(OpK);
+        { 
+          // Operador '-'
+          $$ = newExpNode(OpK);
           $$->attr.opr = SUB;
         }
      ;
 
+/* Expressão de multiplicação/divisão */
 termo: termo mult fator
-            { $$ = $2;
-              $$->child[0] = $1;
-              $$->child[1] = $3;
-            }
-      | fator { $$ = $1; }
-      ;
+         { 
+           // Operação de multiplicação ou divisão
+           $$ = $2;
+           $$->child[0] = $1;
+           $$->child[1] = $3;
+         }
+       | fator { $$ = $1; }
+       ;
 
+/* Operadores '*' e '/' */
 mult: MULT
-       { $$ = newExpNode(OpK);
+       { 
+         // Operador '*'
+         $$ = newExpNode(OpK);
          $$->attr.opr = MULT;
        }
      | DIV
-        { $$ = newExpNode(OpK);
+        { 
+          // Operador '/'
+          $$ = newExpNode(OpK);
           $$->attr.opr = DIV;
         }
      ;
 
-fator: APAR expressao FPAR { $$ = $2; }
-      | var { $$ = $1; }
-      | ativacao { $$ = $1; }
-      | numero { $$ = $1; }
+/* Fatores: expressões entre parênteses, variável, chamada de função ou número */
+fator: APAR expressao FPAR 
+         { 
+           // Expressão entre parênteses
+           $$ = $2; 
+         }
+      | var 
+         { 
+           // Variável
+           $$ = $1; 
+         }
+      | ativacao 
+         { 
+           // Chamada de função
+           $$ = $1; 
+         }
+      | numero 
+         { 
+           // Constante numérica
+           $$ = $1; 
+         }
       ;
 
+/* Chamada de função: com ou sem argumentos */
 ativacao: identificador APAR arg_lista FPAR
-        { $$ = newExpNode(CallK);
-          $$->attr.name = $1->attr.name;
-          $$->child[0] = $3;
-        }
+          { 
+            // Chamada de função com argumentos
+            $$ = newExpNode(CallK);
+            $$->attr.name = $1->attr.name;
+            $$->child[0] = $3; // Lista de argumentos
+          }
         | identificador APAR FPAR
-         { $$ = newExpNode(CallK);
-           $$->attr.name = $1->attr.name;
-         }
-     ;
+          { 
+            // Chamada de função sem argumentos
+            $$ = newExpNode(CallK);
+            $$->attr.name = $1->attr.name;
+          }
+        ;
 
-
+/* Lista de argumentos separados por vírgula */
 arg_lista: arg_lista VIR expressao
-            { YYSTYPE t = $1;
-              if (t != NULL){
-                while (t->sibling != NULL)
-                t = t->sibling;
-                t->sibling = $3;
-                $$ = $1;
-              }
-              else $$ = $3;
-            }
+           { 
+             // Adiciona argumento à lista
+             YYSTYPE t = $1;
+             if (t != NULL){
+               while (t->sibling != NULL)
+                 t = t->sibling;
+               t->sibling = $3;
+               $$ = $1;
+             }
+             else $$ = $3;
+           }
          | expressao { $$ = $1; }
          ;
 
+/* Identificador: cria nó com o nome do identificador */
 identificador: ID
-                { $$ = newExpNode(IdK);
-                  $$->attr.name = copyString(tokenString);
-                }
-              ;
+               { 
+                 // Cria nó para identificador
+                 $$ = newExpNode(IdK);
+                 $$->attr.name = copyString(tokenString);
+               }
+             ;
 
+/* Número: cria nó para constante numérica */
 numero: NUM      
-          { $$ = newExpNode(ConstK);
-            $$->type = intDType;
-            $$->attr.val = atoi(tokenString);
-          }
+         { 
+           $$ = newExpNode(ConstK);
+           $$->type = intDType;
+           $$->attr.val = atoi(tokenString);
+         }
+         ;
 
 %%
 
 int yyerror(char *message) {
-  fprintf(listing,"ERRO SINTÁTICO: %s. LINHA: %d\n", tokenString, lineno);
+  // Trata erros sintáticos e exibe mensagem com o token e a linha
+  fprintf(listing, "ERRO SINTÁTICO: %s. LINHA: %d\n", tokenString, lineno);
   Error = TRUE;
   return 0;
 }
 
-/* yylex calls getToken to make Yacc/Bison output
- * compatible with ealier versions of the TINY scanner
- */
 static int yylex(void) {
+  // Chama a função getToken() do scanner
   return getToken();
 }
 
 TreeNode *parse(void) {
+  // Inicia a análise sintática e retorna a árvore gerada
   yyparse();
   return savedTree;
 }
