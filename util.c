@@ -1,11 +1,3 @@
-/****************************************************/
-/* File: util.c                                     */
-/* Utility function implementation                  */
-/* for the TINY compiler                            */
-/* Compiler Construction: Principles and Practice   */
-/* Kenneth C. Louden                                */
-/****************************************************/
-
 #include "globals.h"
 #include "util.h"
 
@@ -156,7 +148,7 @@ void print_tree(TreeNode *tree) {
           break;
         case ReturnK:
           fprintf(listing, "Return\n");
-          break;
+          break;        
         default:
           fprintf(listing, "Unknown StmtKNode kind\n");
           break;

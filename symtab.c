@@ -1,13 +1,3 @@
-/****************************************************/
-/* File: symtab.c                                   */
-/* Symbol table implementation for the TINY compiler*/
-/* (allows only one symbol table)                   */
-/* Symbol table is implemented as a chained         */
-/* hash table                                       */
-/* Compiler Construction: Principles and Practice   */
-/* Kenneth C. Louden                                */
-/****************************************************/
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -36,7 +26,7 @@ static int hash (char *key) {
 /* the list of line numbers of the source
  * code in which a variable is referenced
  */
-typedef struct LineListRec {
+ typedef struct LineListRec {
   int lineno;
   struct LineListRec *next;
 } *LineList;

@@ -1,16 +1,9 @@
-/****************************************************/
-/* File: analyze.c                                  */
-/* Semantic analyzer implementation                 */
-/* for the TINY compiler                            */
-/* Compiler Construction: Principles and Practice   */
-/* Kenneth C. Louden                                */
-/****************************************************/
 #include <stdio.h>
 #include "globals.h"
 #include "symtab.h"
 #include "analyze.h"
 
-char *scope = "global"; // padrão se não atribuido
+char *scope = "global"; // default scope
 
 /* counter for variable memory locations */
 static int location = 0;
@@ -63,18 +56,14 @@ static void insertNode(TreeNode *t) {
   switch (t->nodekind) {
     case StmtK:
       if (t->kind.stmt == AssignK) {
-          // procurar na tabela
           if (st_lookup(t->child[0]->attr.name) == -1){
-          // não achou
             fprintf(listing,"ERRO SEMÂNTICO: Variável '%s' não declarada. LINHA: %d\n", t->child[0]->attr.name, t->lineno);
-            Error = TRUE;
+          Error = TRUE;
           }
           else {
-            // achou
-            // insere na tabela
             st_insert(t->child[0]->attr.name, t->lineno,0, scope, intDType, var);
-          }
-          t->child[0]->add = 1; // add linha
+        }
+          t->child[0]->add = 1;
       }
       break;
     case ExpK:
@@ -82,13 +71,10 @@ static void insertNode(TreeNode *t) {
         case IdK:
           if (t->add != 1){
             if (st_lookup(t->attr.name) == -1) {
-              // não achou
               fprintf(listing,"ERRO SEMÂNTICO: Variável '%s' não declarada. LINHA: %d\n", t->attr.name, t->lineno);
               Error = TRUE;
             }
             else {
-              //achou
-              //insere
               st_insert(t->attr.name, t->lineno,0, scope, intDType, fun);
             }
           }
@@ -110,11 +96,8 @@ static void insertNode(TreeNode *t) {
                 break;
               case FuncK:
                 if (st_lookup(t->attr.name) == -1) {
-                  // não achou
-                  // insere
                   st_insert(t->child[0]->attr.name, t->child[0]->lineno, location++, "global", t->child[0]->type, fun);
                 } else {
-                  // achou
                   fprintf(listing, "ERRO SEMÂNTICO: Múltiplas declarações de '%s'. LINHA: %d\n", t->child[0]->attr.name, t->child[0]->lineno);
                 }
                 break;
@@ -133,9 +116,6 @@ static void insertNode(TreeNode *t) {
           break;
         default:
           break;
-        case ParamK:
-          st_insert(t->attr.name,t->lineno,location++, scope,intDType, var);
-          break;
       }
       break;
     default:
@@ -147,9 +127,8 @@ static void insertNode(TreeNode *t) {
  * table by preorder traversal of the syntax tree
  */
 void build_symbol_table(TreeNode *syntax_tree) {
-  // TODO: why?
-  // st_insert("input", 0, location++, "global", intDType, fun);
-  // st_insert("output", 0, location++, "global", voidDType, fun);
+  st_insert("input", 0, location++, "global", intDType, fun);
+  st_insert("output", 0, location++, "global", voidDType, fun);
   traverse(syntax_tree,insertNode,nullProc);
   typeCheck(syntax_tree);
   findMain();

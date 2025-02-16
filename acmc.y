@@ -55,7 +55,7 @@ var_declaracao: INT identificador PV
             $2->type = intDType;
           }
 	      | INT identificador ACOL numero FCOL PV
-            { $$ = newExpNode(TypeK);
+            { $$ = newExpNode(TypeK); 
               $$->attr.name = "INT";
               $$->size = $4->attr.val;
               $$->child[0] = $2;
@@ -75,7 +75,7 @@ tipo_especificador: INT
             | VOID
               { $$ = newExpNode(TypeK);
                 $$->attr.name = "VOID";
-                $$->type = intDType;
+                $$->type = voidDType;
                 $$->size = 1;
               }
             ;
@@ -85,7 +85,6 @@ fun_declaracao: INT identificador APAR params FPAR composto_decl
               $$->attr.name = "INT";
               $$->child[0] = $2;
               $2->kind.exp = FuncK;
-              // $2->lineno = $$->lineno; TODO: BUG
               $2->type = intDType;
               $2->child[0] = $4;
               $2->child[1] = $6;
@@ -95,7 +94,6 @@ fun_declaracao: INT identificador APAR params FPAR composto_decl
               $$->attr.name = "VOID";
               $$->child[0] = $2;
               $2->kind.exp = FuncK;
-              // $2->lineno = $$->lineno; TODO: BUG
               $2->type = voidDType;
               $2->child[0] = $4;
               $2->child[1] = $6;
@@ -111,7 +109,7 @@ params: param_lista { $$ = $1; }
           }
        ;
 
-param_lista: param_lista VIR param_lista
+param_lista: param_lista VIR param
               { YYSTYPE t = $1;
                 if (t != NULL){
                   while (t->sibling != NULL)
@@ -148,8 +146,8 @@ composto_decl: ACHAV local_declaracoes statement_lista FCHAV
                   }
                   else $$ = $3;
               }
-             | ACHAV FCHAV {}
-             | ACHAV  local_declaracoes FCHAV { $$ = $2; }
+             | ACHAV FCHAV { $$ = NULL; }
+             | ACHAV local_declaracoes FCHAV { $$ = $2; }
              | ACHAV statement_lista FCHAV { $$ = $2; }
              ;
 
@@ -179,14 +177,14 @@ statement_lista: statement_lista statement
           | statement { $$ = $1; }
           ;
 
-statement: expressap_decl { $$ = $1; }
+statement: expressao_decl { $$ = $1; }
      | composto_decl { $$ = $1; }
      | selecao_decl { $$ = $1; }
      | iteracao_decl { $$ = $1; }
      | retorno_decl { $$ = $1; }
      ;
 
-expressap_decl: expressao PV { $$ = $1; }
+expressao_decl: expressao PV { $$ = $1; }
         |  PV {}
         ;
 

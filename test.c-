@@ -1,12 +1,16 @@
-/* Um programa para calcular o mde
-segundo o algoritmo de Euclides. */
-int gcd (int u, int v)
-{ if (v == 0) return u;
-else return gcd (v,u-u/v*v);
-/* u-u/v* == u mod v */
+int foo( void ) {
+    int a;
+    return 1;
 }
-void main(void)
-{ int x; int y; int z;
-x = input(); y = input();
-output (gcd (x,y));
+
+int main(void) {
+  int abc;
+  int x[10];
+    if (abc > 5) {
+        return 1;
+    }
+    else {
+      x[1] = 10;
+    }
+    return 0;
 }

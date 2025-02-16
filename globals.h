@@ -1,12 +1,3 @@
-/****************************************************/
-/* File: globals.h                                  */
-/* Yacc/Bison Version                               */
-/* Global types and vars for TINY compiler          */
-/* must come before other include files             */
-/* Compiler Construction: Principles and Practice   */
-/* Kenneth C. Louden                                */
-/****************************************************/
-
 #ifndef _GLOBALS_H_
 #define _GLOBALS_H_
 
@@ -63,7 +54,7 @@ extern int lineno; /* source line number for listing */
 
 typedef enum {StmtK, ExpK} NodeKind;
 typedef enum {IfK, WhileK, AssignK, ReturnK} StmtKind;
-typedef enum {OpK, ConstK, IdK, VarK, TypeK, ParamK, FuncK, CallK} ExpKind;
+typedef enum {OpK, ConstK, IdK, VarK, TypeK, ParamK, FuncK, CallK, ArrayAccessK} ExpKind;
 
 /* ExpType is used for type checking */
 typedef enum {Void,Integer,Boolean} ExpType;

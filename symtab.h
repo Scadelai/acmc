@@ -1,11 +1,3 @@
-/****************************************************/
-/* File: symtab.h                                   */
-/* Semantic analyzer interface for TINY compiler    */
-/* Compiler Construction: Principles and Practice   */
-/* Kenneth C. Louden                                */
-/****************************************************/
-
-
 #ifndef _SYMTAB_H_
 #define _SYMTAB_H_
 

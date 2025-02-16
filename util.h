@@ -1,10 +1,3 @@
-/****************************************************/
-/* File: util.h                                     */
-/* Semantic analyzer interface for TINY compiler    */
-/* Compiler Construction: Principles and Practice   */
-/* Kenneth C. Louden                                */
-/****************************************************/
-
 #ifndef _UTIL_H_
 #define _UTIL_H_
 

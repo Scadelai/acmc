@@ -38,7 +38,7 @@ whitespace  [ \t\r]+
 ">"	         {return MAIOR;}
 ">="	       {return MAIIG;}
 "=="         {return IGDAD;}
-"!="         { return DIFER;}
+"!="         {return DIFER;}
 
 ";"          {return PV;}
 ","          {return VIR;}
