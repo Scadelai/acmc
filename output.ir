@@ -1,0 +1,55 @@
+GLOBAL vet[10]
+
+FUNC minloc a, low, high
+    k = low
+    t1 = a[low]
+    x = t1
+    t2 = low + 1
+    i = t2
+L1: if i >= high goto L2
+    t3 = a[i]
+    if t3 >= x goto L3
+    t4 = a[i]
+    x = t4
+    k = i
+L3:     t5 = i + 1
+    i = t5
+    goto L1
+L2:     return k
+END FUNC
+
+FUNC sort a, low, high
+    i = low
+    t6 = high - 1
+L4: if i >= t6 goto L5
+    t7 = call minloc(a, i, high)
+    k = t7
+    t8 = a[k]
+    t = t8
+    t9 = a[i]
+    a[k] = t9
+    a[i] = t
+    t10 = i + 1
+    i = t10
+    goto L4
+L5:     return
+END FUNC
+
+FUNC main
+    i = 0
+L6: if i >= 10 goto L7
+    t11 = call input()
+    vet[i] = t11
+    t12 = i + 1
+    i = t12
+    goto L6
+L7:     call sort(vet, 0, 10)
+    i = 0
+L8: if i >= 10 goto L9
+    t13 = vet[i]
+    call output(t13)
+    t14 = i + 1
+    i = t14
+    goto L8
+L9:     return
+END FUNC

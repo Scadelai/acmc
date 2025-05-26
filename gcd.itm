@@ -1,0 +1,17 @@
+FUNC gcd u, v
+    if v == 0 goto L1
+    t1 = u / v
+    t2 = t1 * v
+    t3 = u - t2
+    t4 = call gcd(v, t3)
+    return t4
+L1: return u
+END FUNC
+
+FUNC main
+    x = call input()
+    y = call input()
+    t5 = call gcd(x, y)
+    call output(t5)
+    return
+END FUNC

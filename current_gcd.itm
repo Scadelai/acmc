@@ -1,0 +1,58 @@
+
+Syntax tree:
+
+  Type: INT
+    Func: gcd
+      Type: INT
+        Param: u
+      Type: INT
+        Param: v
+      If
+        Oper: ==
+          Id: v
+          Const: 0
+        Return
+          Id: u
+        Return
+          Call func: gcd
+            Id: v
+            Oper: -
+              Id: u
+              Oper: *
+                Oper: /
+                  Id: u
+                  Id: v
+                Id: v
+  Type: VOID
+    Func: main
+      Type: VOID
+      Type: INT
+        Var: x
+      Type: INT
+        Var: y
+      Assign: 
+        Id: x
+        Call func: input
+      Assign: 
+        Id: y
+        Call func: input
+      Call func: output
+        Call func: gcd
+          Id: x
+          Id: y
+
+Symbol table:
+
+----------------------------------------------------------------------------------------
+Name       Scope      Type     Data Type   Lines
+----------------------------------------------------------------------------------------
+main       global      func     VOID        11 
+input      global      func     INT          0  13  13 
+u          gcd         var      INT          4   6   7   7 
+output     global      func     VOID         0  14 
+v          gcd         var      INT          4   6   7   7   7 
+x          main        var      INT         12  13  14 
+y          main        var      INT         12  13  14 
+gcd        global      func     INT          4   7  14 
+
+IR code does not match reference file.

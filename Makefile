@@ -1,6 +1,6 @@
 CC = gcc
 BIN = acmc
-OBJS = acmc.tab.o lex.yy.o analyze.o symtab.o util.o main.o
+OBJS = acmc.tab.o lex.yy.o analyze.o symtab.o util.o main.o codegen.o
 
 $(BIN): $(OBJS)
 	$(CC) -o $(BIN) $(OBJS) -lfl
