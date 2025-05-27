@@ -55,3 +55,7 @@ dkms.conf
 *.yy.c
 *.tab.c
 *.tab.h
+
+# VS Code workspace files
+.vscode/.vscode/
+.vscode/settings.json
