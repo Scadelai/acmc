@@ -76,7 +76,7 @@ int main(int argc, char *argv[]) {
     build_symbol_table(syntax_tree);
     // Chama a função para gerar o código intermediário; 
     // esta função deve gravar a saída em "output.ir"
-    codeGen(syntax_tree);
+    codeGen(syntax_tree, "output.ir");
   }
 
   fclose(source);
