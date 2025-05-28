@@ -271,7 +271,6 @@ char *generate_expression_code(TreeNode *tree) {
                         // Fallback: trata como movimento simples se deve produzir algo
                         emit_buffered("MOV %s, %s // AVISO: fallback OpK", result_var, left_operand);
                     }
-                    // free(left_operand); free(right_operand); // Se alocados
                     return result_var;
 
                 case CallK: // Chamada de função
@@ -335,7 +334,6 @@ static void generate_statement_code(TreeNode *tree) {
                     if (tree->child[0]->kind.exp == IdK && tree->child[0]->child[0] != NULL) { // Atribuição a array: var[idx] = val
                         idx_expr = generate_expression_code(tree->child[0]->child[0]);
                         emit_buffered("STORE_ARRAY %s, %s, %s", tree->child[0]->attr.name, idx_expr, rhs_var);
-                        // free(idx_expr);
                     } else { // Atribuição simples: var = val
                         // LHS pode ser IdK ou VarK baseado no parser original
                         if (tree->child[0]->nodekind == ExpK && (tree->child[0]->kind.exp == IdK || tree->child[0]->kind.exp == VarK)) {
@@ -346,7 +344,6 @@ static void generate_statement_code(TreeNode *tree) {
                             fprintf(stderr, "Erro: LHS da atribuição não é um tipo de variável reconhecido.\n");
                         }
                     }
-                    // free(rhs_var); // Se alocado e temporário
                     break;
 
                 case IfK: // Comando condicional if-then-else
@@ -356,7 +353,6 @@ static void generate_statement_code(TreeNode *tree) {
                         char *op1 = generate_expression_code(tree->child[0]->child[0]);
                         char *op2 = generate_expression_code(tree->child[0]->child[1]);
                         emit_buffered("CMP %s, %s", op1, op2);
-                        // free(op1); free(op2);
 
                         // Salta se condição é FALSA para label1
                         const char *branch_instr = get_ir_branch_instruction(tree->child[0]->attr.opr, 0); // salta em falso
@@ -365,14 +361,6 @@ static void generate_statement_code(TreeNode *tree) {
                         char *cond_var = generate_expression_code(tree->child[0]);
                         emit_buffered("CMP %s, 0 // Assumindo 0 é falso", cond_var); // Ou usar valor específico true/false
                         emit_buffered("BR_EQ %s // Salta se cond_var é falso (0)", label1);
-                        // free(cond_var);
-                    }
-
-                    // Processa todos os comandos na parte then
-                    TreeNode *then_stmt = tree->child[1];
-                    while (then_stmt != NULL) {
-                        generate_code_single(then_stmt);
-                        then_stmt = then_stmt->sibling;
                     }
 
                     if (tree->child[2] != NULL) { // Parte else existe
@@ -393,9 +381,9 @@ static void generate_statement_code(TreeNode *tree) {
                     free(label1);
                     break;
 
-                case WhileK: // Comando de repetição while
-                    label1 = newLabel(); // Rótulo para verificação da condição
-                    label2 = newLabel(); // Rótulo para fim do loop
+                case WhileK: // Comando while
+                    label1 = newLabel(); // verificação da condição
+                    label2 = newLabel(); // fim do loop
                     
                     emit_buffered("%s: // Condição do while", label1);
                     // Geração da condição
@@ -403,7 +391,6 @@ static void generate_statement_code(TreeNode *tree) {
                         char *op1 = generate_expression_code(tree->child[0]->child[0]);
                         char *op2 = generate_expression_code(tree->child[0]->child[1]);
                         emit_buffered("CMP %s, %s", op1, op2);
-                        // free(op1); free(op2);
 
                         // Salta se condição é FALSA para label2 (fim do loop)
                         const char *branch_instr = get_ir_branch_instruction(tree->child[0]->attr.opr, 0); // salta em falso
@@ -412,7 +399,6 @@ static void generate_statement_code(TreeNode *tree) {
                          char *cond_var = generate_expression_code(tree->child[0]);
                          emit_buffered("CMP %s, 0 // Assumindo 0 é falso para while", cond_var);
                          emit_buffered("BR_EQ %s // Salta se cond_var é falso (0)", label2);
-                         // free(cond_var);
                     }
 
                     // Processa todos os comandos no corpo do loop
@@ -431,28 +417,19 @@ static void generate_statement_code(TreeNode *tree) {
                     if (tree->child[0] != NULL) {
                         val_expr = generate_expression_code(tree->child[0]);
                         emit_buffered("RETURN %s", val_expr);
-                        // free(val_expr);
                     } else {
                         emit_buffered("RETURN_VOID");
                     }
                     break;
                 
-                // Removido caso VarDeclK, pois AST C-minus pode não tê-lo explicitamente.
-                // Variáveis locais são tipicamente identificadas por uso (ex. no LHS de assign)
-                // ou como parâmetros.
-
                 default:
                     fprintf(stderr, "Erro: Tipo de comando desconhecido em generate_statement_code.\n");
                     break;
             }
             break;
         case ExpK: // Expressão standalone, ex. chamada de função não parte de uma atribuição
-            if (tree->kind.exp == CallK) {
+            if (tree->kind.exp == CallK)
                 generate_expression_code(tree); // Irá emitir ARG, CALL
-            } else {
-                // Outras expressões como comandos geralmente não têm efeito colateral ou são erros
-                // generate_expression_code(tree); // Poderia gerar código mas resultado não é usado
-            }
             break;
         default:
             fprintf(stderr, "Erro: Nó não-comando/expressão em generate_statement_code.\n");
@@ -462,8 +439,8 @@ static void generate_statement_code(TreeNode *tree) {
 
 
 // Função de geração de código recursiva (sem processamento de irmãos)
-// Processa apenas o nó atual sem navegar pelos siblings
-// Usada para evitar processamento duplicado em contextos onde os siblings
+// Processa apenas o nó atual sem navegar pelos irmãos
+// Usada para evitar processamento duplicado em contextos onde os irmãos
 // já são processados explicitamente pelo código chamador
 static void generate_code_single(TreeNode *tree) {
     if (tree == NULL) return;
@@ -680,8 +657,7 @@ void codeGen(TreeNode *syntaxTree, char * irOutputFile) {
     globalVars = NULL;
 }
 
-// Função codegen para ser chamada de main.c (se main.c espera a assinatura antiga)
-// Para compatibilidade se main.c chama codeGen(syntaxTree) sem nome de arquivo
+// Função codegen para ser chamada de main.c
 void generateIntermediateCode(TreeNode *syntaxTree) {
     codeGen(syntaxTree, "output.ir");
 }
