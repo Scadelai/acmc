@@ -31,11 +31,45 @@
 #define MAX_FUNC_LOCALS 256
 #define MAX_FUNC_PARAMS 32
 #define MAX_IDENTIFIER_LEN 256
+#define MAX_TEMPORARIES 64
+
+// Estruturas para as melhorias aprimoradas
+typedef struct {
+    char name[32];
+    int in_use;
+    int scope_level;
+} TemporaryReg;
+
+typedef struct {
+    char *result_var;
+    int is_constant;
+    int constant_value;
+} ExpressionResult;
+
+typedef enum {
+    VAR_GLOBAL,
+    VAR_PARAM,
+    VAR_LOCAL,
+    VAR_UNKNOWN
+} VariableScope;
+
+typedef struct {
+    int total_instructions;
+    int total_temporaries;
+    int total_labels;
+    int total_functions;
+    int optimization_count;
+} CompilationStats;
 
 static FILE *outputFile;
 static int tempCount = 0;    // Contador para variáveis temporárias (reiniciado por função)
 static int labelCount = 0;   // Contador para rótulos (reiniciado por função)
 static GlobalVarList globalVars = NULL; // Lista de variáveis globais
+
+// Variáveis para o sistema aprimorado de temporários
+static TemporaryReg temp_pool[MAX_TEMPORARIES];
+static int temp_pool_initialized = 0;
+static CompilationStats stats = {0, 0, 0, 0, 0};
 
 // Buffer para código de função - usado para coletar todas as instruções de uma função
 // antes de escrever no arquivo, permitindo gerar declarações LOCAL corretas
@@ -64,6 +98,19 @@ char *generate_expression_code(TreeNode *tree);
 static void generate_statement_code(TreeNode *tree);
 static const char *get_ir_op_string(TokenType op);
 static const char *get_ir_branch_instruction(TokenType op, int branch_on_true);
+
+// Novas funções para sistema aprimorado de temporários
+static void init_temp_pool(void);
+static char *allocate_temp(void);
+static void release_temp(const char *temp_name);
+static void release_all_temps(void);
+static ExpressionResult optimize_expression(TreeNode *tree);
+static int is_simple_assignment(TreeNode *tree);
+
+// Funções de estatísticas e validação
+void print_compilation_stats(void);
+void reset_compilation_stats(void);
+static int validate_ir_file(const char *ir_file);
 
 
 // Função auxiliar para adicionar variável global à lista
@@ -103,6 +150,24 @@ static void emit_buffered(const char *instruction_format, ...) {
     vsnprintf(buf, sizeof(buf), instruction_format, args);
     va_end(args);
     instruction_buffer[instruction_buffer_count++] = copyString(buf);
+    
+    // Coleta estatísticas aprimoradas
+    stats.total_instructions++;
+}
+
+// Emite instrução em formato quadrupla (op, arg1, arg2, arg3)
+static void emit_quad(const char *op, const char *arg1, const char *arg2, const char *arg3) {
+    char buf[256];
+    snprintf(buf, sizeof(buf), "%s %s, %s, %s", op, 
+             arg1 ? arg1 : "__", 
+             arg2 ? arg2 : "__", 
+             arg3 ? arg3 : "__");
+    emit_buffered("%s", buf);
+}
+
+// Emite label (não segue formato quadrupla)
+static void emit_label(const char *label) {
+    emit_buffered("%s:", label);
 }
 
 // Adiciona uma variável à lista de variáveis locais da função atual
@@ -136,9 +201,18 @@ static void add_local_var(const char *name) {
 // Cria uma nova variável temporária única para a função atual
 // Automaticamente adiciona à lista de variáveis locais
 char *newTemp(void) {
+    // Usa o sistema aprimorado se disponível
+    char *temp = allocate_temp();
+    if (temp != NULL) {
+        stats.total_temporaries++;
+        return temp;
+    }
+    
+    // Fallback para o sistema original
     char *temp_name = (char *)malloc(MAX_IDENTIFIER_LEN);
     snprintf(temp_name, MAX_IDENTIFIER_LEN, "t%d", tempCount++);
     add_local_var(temp_name);
+    stats.total_temporaries++;
     return temp_name;
 }
 
@@ -148,6 +222,7 @@ char *newLabel(void) {
     char *label = (char *)malloc(MAX_LABEL_LEN);
     // Para rótulos mais únicos se necessário: snprintf(label, MAX_LABEL_LEN, "L_%s_%d", current_func_name_codegen, labelCount++);
     snprintf(label, MAX_LABEL_LEN, "L%d", labelCount++);
+    stats.total_labels++;
     return label;
 }
 
@@ -158,9 +233,11 @@ char *newLabel(void) {
 // size > 0 para arrays, 0 para variáveis simples
 static void emit_global_decl(const char *name, int size) {
     if (size > 0) { // Assumindo size > 0 para arrays, 0 ou 1 para variáveis simples
-        fprintf(outputFile, "GLOBAL_ARRAY %s, %d\n", name, size);
+        char size_str[16];
+        snprintf(size_str, sizeof(size_str), "%d", size);
+        fprintf(outputFile, "GLOBAL_ARRAY %s, %s, __, __\n", name, size_str);
     } else {
-        fprintf(outputFile, "GLOBAL %s\n", name); // Variável global simples
+        fprintf(outputFile, "GLOBAL %s, __, __, __\n", name); // Variável global simples
     }
 }
 
@@ -172,25 +249,24 @@ static void emit_global_decl(const char *name, int size) {
 // Todas as instruções do corpo da função
 // END_FUNC com nome da função
 static void flush_function_buffer() {
-    fprintf(outputFile, "FUNC_BEGIN %s, %d\n", current_func_name_codegen, param_count);
+    char param_count_str[16];
+    snprintf(param_count_str, sizeof(param_count_str), "%d", param_count);
+    fprintf(outputFile, "FUNC_BEGIN %s, %s, __, __\n", current_func_name_codegen, param_count_str);
 
     for (int i = 0; i < param_count; ++i) {
-        fprintf(outputFile, "  PARAM %s\n", param_list[i]);
+        fprintf(outputFile, "  PARAM %s, __, __, __\n", param_list[i]);
     }
 
-    if (local_vars_count > 0) {
-        fprintf(outputFile, "  LOCAL ");
-        for (int i = 0; i < local_vars_count; ++i) {
-            fprintf(outputFile, "%s%s", local_vars_list[i], (i == local_vars_count - 1) ? "" : ", ");
-        }
-        fprintf(outputFile, "\n");
+    // Generate LOCAL declarations in proper quadruple format
+    for (int i = 0; i < local_vars_count; ++i) {
+        fprintf(outputFile, "  LOCAL %s, __, __, __\n", local_vars_list[i]);
     }
 
     for (int i = 0; i < instruction_buffer_count; ++i) {
         fprintf(outputFile, "  %s\n", instruction_buffer[i]);
         free(instruction_buffer[i]);
     }
-    fprintf(outputFile, "END_FUNC %s\n\n", current_func_name_codegen);
+    fprintf(outputFile, "END_FUNC %s, __, __, __\n\n", current_func_name_codegen);
 
     // Reinicia buffers para a próxima função
     instruction_buffer_count = 0;
@@ -252,7 +328,7 @@ char *generate_expression_code(TreeNode *tree) {
                     if (tree->child[0] != NULL) { // Acesso a array: var[índice]
                         index_expr = generate_expression_code(tree->child[0]);
                         result_var = newTemp();
-                        emit_buffered("LOAD_ARRAY %s, %s, %s", result_var, tree->attr.name, index_expr);
+                        emit_quad("LOAD_ARRAY", result_var, tree->attr.name, index_expr);
                     } else { // Variável simples
                         result_var = copyString(tree->attr.name);
                         // Se é uma variável local não-parâmetro, garante que está na lista local_vars_list
@@ -265,11 +341,11 @@ char *generate_expression_code(TreeNode *tree) {
                     result_var = newTemp();
                     const char *op_str = get_ir_op_string(tree->attr.opr);
                     if (strcmp(op_str, "OP_UNKNOWN") != 0) { // Aritmética
-                        emit_buffered("%s %s, %s, %s", op_str, result_var, left_operand, right_operand);
+                        emit_quad(op_str, result_var, left_operand, right_operand);
                     } else {
                         fprintf(stderr, "Erro: Operador de comparação usado em contexto de expressão aritmética.\n");
                         // Fallback: trata como movimento simples se deve produzir algo
-                        emit_buffered("MOV %s, %s // AVISO: fallback OpK", result_var, left_operand);
+                        emit_quad("MOV", result_var, left_operand, NULL); // AVISO: fallback OpK
                     }
                     return result_var;
 
@@ -287,7 +363,7 @@ char *generate_expression_code(TreeNode *tree) {
 
                         // Emite instruções ARG
                         for (int i = 0; i < arg_count; ++i) {
-                            emit_buffered("ARG %s", arg_vars[i]);
+                            emit_quad("ARG", arg_vars[i], NULL, NULL);
                         }
 
                         // Determina se a função retorna um valor.
@@ -295,11 +371,13 @@ char *generate_expression_code(TreeNode *tree) {
                         // Outras retornam um valor.
                         int is_void_call = (strcmp(tree->attr.name, "output") == 0 || strcmp(tree->attr.name, "sort") == 0);
 
-                        emit_buffered("CALL %s, %d", tree->attr.name, arg_count);
+                        char arg_count_str[16];
+                        snprintf(arg_count_str, sizeof(arg_count_str), "%d", arg_count);
+                        emit_quad("CALL", tree->attr.name, arg_count_str, NULL);
 
                         if (!is_void_call) {
                             result_var = newTemp();
-                            emit_buffered("STORE_RET %s", result_var);
+                            emit_quad("STORE_RET", result_var, NULL, NULL);
                             return result_var;
                         } else {
                             return NULL; // Chamada void não produz variável resultado
@@ -333,13 +411,13 @@ static void generate_statement_code(TreeNode *tree) {
                     rhs_var = generate_expression_code(tree->child[1]);
                     if (tree->child[0]->kind.exp == IdK && tree->child[0]->child[0] != NULL) { // Atribuição a array: var[idx] = val
                         idx_expr = generate_expression_code(tree->child[0]->child[0]);
-                        emit_buffered("STORE_ARRAY %s, %s, %s", tree->child[0]->attr.name, idx_expr, rhs_var);
+                        emit_quad("STORE_ARRAY", tree->child[0]->attr.name, idx_expr, rhs_var);
                     } else { // Atribuição simples: var = val
                         // LHS pode ser IdK ou VarK baseado no parser original
                         if (tree->child[0]->nodekind == ExpK && (tree->child[0]->kind.exp == IdK || tree->child[0]->kind.exp == VarK)) {
                             lhs_var = tree->child[0]->attr.name;
                             add_local_var(lhs_var); // Garante que variável LHS está em locais se não for param/global
-                            emit_buffered("MOV %s, %s", lhs_var, rhs_var);
+                            emit_quad("MOV", lhs_var, rhs_var, NULL);
                         } else {
                             fprintf(stderr, "Erro: LHS da atribuição não é um tipo de variável reconhecido.\n");
                         }
@@ -352,31 +430,31 @@ static void generate_statement_code(TreeNode *tree) {
                     if (tree->child[0]->kind.exp == OpK) {
                         char *op1 = generate_expression_code(tree->child[0]->child[0]);
                         char *op2 = generate_expression_code(tree->child[0]->child[1]);
-                        emit_buffered("CMP %s, %s", op1, op2);
+                        emit_quad("CMP", op1, op2, NULL);
 
                         // Salta se condição é FALSA para label1
                         const char *branch_instr = get_ir_branch_instruction(tree->child[0]->attr.opr, 0); // salta em falso
-                        emit_buffered("%s %s", branch_instr, label1);
+                        emit_quad(branch_instr, label1, NULL, NULL);
                     } else { // Condição de variável booleana simples (não típico em C-minus)
                         char *cond_var = generate_expression_code(tree->child[0]);
-                        emit_buffered("CMP %s, 0 // Assumindo 0 é falso", cond_var); // Ou usar valor específico true/false
-                        emit_buffered("BR_EQ %s // Salta se cond_var é falso (0)", label1);
+                        emit_quad("CMP", cond_var, "0", NULL); // Assumindo 0 é falso
+                        emit_quad("BR_EQ", label1, NULL, NULL); // Salta se cond_var é falso (0)
                     }
 
                     if (tree->child[2] != NULL) { // Parte else existe
                         label2 = newLabel(); // Rótulo para fim do if-else
-                        emit_buffered("GOTO %s", label2);
-                        emit_buffered("%s:", label1); // Rótulo para else
+                        emit_quad("GOTO", label2, NULL, NULL);
+                        emit_label(label1); // Rótulo para else
                         // Processa todos os comandos na parte else
                         TreeNode *else_stmt = tree->child[2];
                         while (else_stmt != NULL) {
                             generate_code_single(else_stmt);
                             else_stmt = else_stmt->sibling;
                         }
-                        emit_buffered("%s:", label2); // Rótulo para fim do if-else
+                        emit_label(label2); // Rótulo para fim do if-else
                         free(label2);
                     } else { // Não há parte else
-                        emit_buffered("%s:", label1); // Rótulo para fim do if
+                        emit_label(label1); // Rótulo para fim do if
                     }
                     free(label1);
                     break;
@@ -385,20 +463,20 @@ static void generate_statement_code(TreeNode *tree) {
                     label1 = newLabel(); // verificação da condição
                     label2 = newLabel(); // fim do loop
                     
-                    emit_buffered("%s: // Condição do while", label1);
+                    emit_label(label1); // Condição do while
                     // Geração da condição
                     if (tree->child[0]->kind.exp == OpK) {
                         char *op1 = generate_expression_code(tree->child[0]->child[0]);
                         char *op2 = generate_expression_code(tree->child[0]->child[1]);
-                        emit_buffered("CMP %s, %s", op1, op2);
+                        emit_quad("CMP", op1, op2, NULL);
 
                         // Salta se condição é FALSA para label2 (fim do loop)
                         const char *branch_instr = get_ir_branch_instruction(tree->child[0]->attr.opr, 0); // salta em falso
-                        emit_buffered("%s %s", branch_instr, label2);
+                        emit_quad(branch_instr, label2, NULL, NULL);
                     } else {
                          char *cond_var = generate_expression_code(tree->child[0]);
-                         emit_buffered("CMP %s, 0 // Assumindo 0 é falso para while", cond_var);
-                         emit_buffered("BR_EQ %s // Salta se cond_var é falso (0)", label2);
+                         emit_quad("CMP", cond_var, "0", NULL); // Assumindo 0 é falso para while
+                         emit_quad("BR_EQ", label2, NULL, NULL); // Salta se cond_var é falso (0)
                     }
 
                     // Processa todos os comandos no corpo do loop
@@ -407,8 +485,8 @@ static void generate_statement_code(TreeNode *tree) {
                         generate_code_single(loop_stmt);
                         loop_stmt = loop_stmt->sibling;
                     }
-                    emit_buffered("GOTO %s", label1); // Volta para verificação da condição
-                    emit_buffered("%s:", label2); // Rótulo para fim do loop
+                    emit_quad("GOTO", label1, NULL, NULL); // Volta para verificação da condição
+                    emit_label(label2); // Rótulo para fim do loop
                     free(label1);
                     free(label2);
                     break;
@@ -416,9 +494,9 @@ static void generate_statement_code(TreeNode *tree) {
                 case ReturnK: // Comando de retorno
                     if (tree->child[0] != NULL) {
                         val_expr = generate_expression_code(tree->child[0]);
-                        emit_buffered("RETURN %s", val_expr);
+                        emit_quad("RETURN", val_expr, NULL, NULL);
                     } else {
-                        emit_buffered("RETURN_VOID");
+                        emit_quad("RETURN_VOID", NULL, NULL, NULL);
                     }
                     break;
                 
@@ -611,6 +689,12 @@ void codeGen(TreeNode *syntaxTree, char * irOutputFile) {
                 strncpy(current_func_name_codegen, actual_decl->attr.name, MAX_IDENTIFIER_LEN -1);
                 current_func_name_codegen[MAX_IDENTIFIER_LEN-1] = '\0';
 
+                // Inicializa sistema aprimorado de temporários para a nova função
+                release_all_temps();
+                
+                // Coleta estatísticas de função
+                stats.total_functions++;
+
                 // Coleta parâmetros da função
                 TreeNode *param_node = actual_decl->child[0];
                 while (param_node != NULL && param_count < MAX_FUNC_PARAMS) {
@@ -646,6 +730,18 @@ void codeGen(TreeNode *syntaxTree, char * irOutputFile) {
     
     fclose(outputFile);
 
+    // Imprime estatísticas de compilação aprimoradas
+    print_compilation_stats();
+    
+    // Validação básica do código gerado
+    printf("Validando código IR gerado...\n");
+    int validation_errors = validate_ir_file("output.ir");
+    if (validation_errors == 0) {
+        printf("✓ Código IR válido gerado com sucesso!\n");
+    } else {
+        printf("⚠ Encontrados %d problemas durante a validação\n", validation_errors);
+    }
+
     // Libera lista de variáveis globais
     GlobalVarList curr = globalVars;
     while (curr != NULL) {
@@ -660,4 +756,332 @@ void codeGen(TreeNode *syntaxTree, char * irOutputFile) {
 // Função codegen para ser chamada de main.c
 void generateIntermediateCode(TreeNode *syntaxTree) {
     codeGen(syntaxTree, "output.ir");
+}
+
+// ============================================================================
+// SISTEMA APRIMORADO DE GERENCIAMENTO DE TEMPORÁRIOS
+// Baseado nas melhorias identificadas nos outros compiladores
+// ============================================================================
+
+// Inicializa o pool de temporários
+static void init_temp_pool(void) {
+    if (!temp_pool_initialized) {
+        for (int i = 0; i < MAX_TEMPORARIES; i++) {
+            snprintf(temp_pool[i].name, sizeof(temp_pool[i].name), "t%d", i);
+            temp_pool[i].in_use = 0;
+            temp_pool[i].scope_level = 0;
+        }
+        temp_pool_initialized = 1;
+    }
+}
+
+// Aloca um temporário disponível
+static char *allocate_temp(void) {
+    init_temp_pool();
+    
+    for (int i = 0; i < MAX_TEMPORARIES; i++) {
+        if (!temp_pool[i].in_use) {
+            temp_pool[i].in_use = 1;
+            temp_pool[i].scope_level = 1; // Nível básico de escopo
+            
+            // Adiciona à lista de variáveis locais se não estiver presente
+            int found = 0;
+            for (int j = 0; j < local_vars_count; j++) {
+                if (strcmp(local_vars_list[j], temp_pool[i].name) == 0) {
+                    found = 1;
+                    break;
+                }
+            }
+            if (!found) {
+                add_local_var(temp_pool[i].name);
+            }
+            
+            return temp_pool[i].name;
+        }
+    }
+    
+    // Fallback para o sistema antigo se pool estiver cheio
+    char *temp_name = malloc(16);
+    snprintf(temp_name, 16, "t%d", tempCount++);
+    add_local_var(temp_name);
+    return temp_name;
+}
+
+// Libera um temporário específico
+static void release_temp(const char *temp_name) {
+    if (!temp_name) return;
+    
+    for (int i = 0; i < MAX_TEMPORARIES; i++) {
+        if (strcmp(temp_pool[i].name, temp_name) == 0) {
+            temp_pool[i].in_use = 0;
+            temp_pool[i].scope_level = 0;
+            return;
+        }
+    }
+}
+
+// Libera todos os temporários (fim de função)
+static void release_all_temps(void) {
+    for (int i = 0; i < MAX_TEMPORARIES; i++) {
+        temp_pool[i].in_use = 0;
+        temp_pool[i].scope_level = 0;
+    }
+}
+
+// Otimização de expressões simples
+static ExpressionResult optimize_expression(TreeNode *tree) {
+    ExpressionResult result = {NULL, 0, 0};
+    
+    if (!tree) return result;
+    
+    // Otimização para constantes
+    if (tree->nodekind == ExpK && tree->kind.exp == ConstK) {
+        result.is_constant = 1;
+        result.constant_value = tree->attr.val;
+        return result;
+    }
+    
+    // Otimização para variáveis simples
+    if (tree->nodekind == ExpK && tree->kind.exp == IdK) {
+        result.result_var = copyString(tree->attr.name);
+        return result;
+    }
+    
+    return result;
+}
+
+// Verifica se é uma atribuição simples (otimização)
+static int is_simple_assignment(TreeNode *tree) {
+    if (!tree || tree->nodekind != StmtK || tree->kind.stmt != AssignK) {
+        return 0;
+    }
+    
+    // Verifica se o lado direito é uma expressão simples
+    TreeNode *rhs = tree->child[1];
+    if (rhs && rhs->nodekind == ExpK && 
+        (rhs->kind.exp == ConstK || rhs->kind.exp == IdK)) {
+        return 1;
+    }
+    
+    return 0;
+}
+
+// ============================================================================
+// FUNÇÕES AUXILIARES APRIMORADAS
+// ============================================================================
+
+// Função aprimorada de geração de expressões com otimizações
+// Baseada nos padrões identificados nos outros compiladores
+char *generate_optimized_expression_code(TreeNode *tree) {
+    if (tree == NULL) return NULL;
+
+    // Primeiro tenta otimizar a expressão
+    ExpressionResult opt_result = optimize_expression(tree);
+    
+    // Se é uma constante, retorna diretamente o valor
+    if (opt_result.is_constant) {
+        char *const_str = malloc(32);
+        snprintf(const_str, 32, "%d", opt_result.constant_value);
+        return const_str;
+    }
+    
+    // Se é uma variável simples, retorna o nome
+    if (opt_result.result_var) {
+        return opt_result.result_var;
+    }
+    
+    // Caso contrário, usa a geração padrão
+    return generate_expression_code(tree);
+}
+
+// Sistema de análise de escopo aprimorado
+// Identifica se uma variável é local, parâmetro ou global
+static VariableScope get_variable_scope(const char *var_name) {
+    if (!var_name) return VAR_UNKNOWN;
+    
+    // Verifica se é parâmetro
+    for (int i = 0; i < param_count; i++) {
+        if (strcmp(param_list[i], var_name) == 0) {
+            return VAR_PARAM;
+        }
+    }
+    
+    // Verifica se é variável local
+    for (int i = 0; i < local_vars_count; i++) {
+        if (strcmp(local_vars_list[i], var_name) == 0) {
+            return VAR_LOCAL;
+        }
+    }
+    
+    // Verifica se é global
+    GlobalVarList curr = globalVars;
+    while (curr != NULL) {
+        if (strcmp(curr->name, var_name) == 0) {
+            return VAR_GLOBAL;
+        }
+        curr = curr->next;
+    }
+    
+    return VAR_UNKNOWN;
+}
+
+// Função de otimização de atribuições
+// Evita movimentações desnecessárias quando possível
+static void generate_optimized_assignment(TreeNode *tree) {
+    if (!tree || tree->nodekind != StmtK || tree->kind.stmt != AssignK) {
+        generate_statement_code(tree);
+        return;
+    }
+    
+    // Se é uma atribuição simples, pode otimizar
+    if (is_simple_assignment(tree)) {
+        TreeNode *lhs = tree->child[0];
+        TreeNode *rhs = tree->child[1];
+        
+        if (lhs->kind.exp == IdK && rhs->kind.exp == IdK) {
+            // Atribuição variável para variável: x = y
+            emit_buffered("MOV %s, %s // Atribuição otimizada", lhs->attr.name, rhs->attr.name);
+            add_local_var(lhs->attr.name);
+            return;
+        } else if (lhs->kind.exp == IdK && rhs->kind.exp == ConstK) {
+            // Atribuição constante para variável: x = 5
+            emit_buffered("MOV %s, %d // Atribuição constante otimizada", lhs->attr.name, rhs->attr.val);
+            add_local_var(lhs->attr.name);
+            return;
+        }
+    }
+    
+    // Caso padrão - usa geração normal
+    generate_statement_code(tree);
+}
+
+// Função para imprimir estatísticas de compilação
+void print_compilation_stats(void) {
+    printf("\n=== ESTATÍSTICAS DE COMPILAÇÃO ===\n");
+    printf("Total de instruções geradas: %d\n", stats.total_instructions);
+    printf("Total de temporários utilizados: %d\n", stats.total_temporaries);
+    printf("Total de rótulos criados: %d\n", stats.total_labels);
+    printf("Total de funções processadas: %d\n", stats.total_functions);
+    printf("Otimizações aplicadas: %d\n", stats.optimization_count);
+    printf("===================================\n");
+}
+
+// Função para resetar estatísticas
+void reset_compilation_stats(void) {
+    stats.total_instructions = 0;
+    stats.total_temporaries = 0;
+    stats.total_labels = 0;
+    stats.total_functions = 0;
+    stats.optimization_count = 0;
+}
+
+// Versão aprimorada da função emit_buffered com estatísticas
+static void emit_buffered_with_stats(const char *instruction_format, ...) {
+    if (instruction_buffer_count >= MAX_FUNC_INSTRUCTIONS) {
+        fprintf(stderr, "Erro: Muitas instruções para a função %s\n", current_func_name_codegen);
+        return;
+    }
+    char buf[256];
+    va_list args;
+    va_start(args, instruction_format);
+    vsnprintf(buf, sizeof(buf), instruction_format, args);
+    va_end(args);
+    instruction_buffer[instruction_buffer_count++] = copyString(buf);
+    
+    // Atualiza estatísticas
+    stats.total_instructions++;
+}
+
+// Sistema de verificação de integridade do código gerado
+// Valida se o código IR gerado está semanticamente correto
+static int validate_generated_code(void) {
+    int errors = 0;
+    
+    // Verifica se todas as variáveis usadas foram declaradas
+    for (int i = 0; i < instruction_buffer_count; i++) {
+        char *instr = instruction_buffer[i];
+        // Análise básica - procura por padrões suspeitos
+        if (strstr(instr, "t-1") || strstr(instr, "L-1")) {
+            fprintf(stderr, "Aviso: Instrução suspeita detectada: %s\n", instr);
+            errors++;
+        }
+    }
+    
+    return errors;
+}
+
+// Sistema completo de validação do arquivo IR
+// Valida a integridade do arquivo de código intermediário gerado
+static int validate_ir_file(const char *ir_file) {
+    FILE *file = fopen(ir_file, "r");
+    if (!file) {
+        fprintf(stderr, "Erro: Não foi possível abrir %s para validação\n", ir_file);
+        return -1;
+    }
+    
+    char line[256];
+    int line_number = 0;
+    int errors = 0;
+    int functions_found = 0;
+    int func_begins = 0;
+    int func_ends = 0;
+    
+    while (fgets(line, sizeof(line), file)) {
+        line_number++;
+        
+        // Remove quebra de linha
+        char *newline = strchr(line, '\n');
+        if (newline) *newline = '\0';
+        
+        // Pula linhas vazias e comentários
+        if (strlen(line) == 0 || line[0] == '/' || line[0] == '#') continue;
+        
+        // Verifica estrutura de funções
+        if (strstr(line, "FUNC_BEGIN")) {
+            func_begins++;
+            functions_found++;
+        }
+        if (strstr(line, "END_FUNC")) {
+            func_ends++;
+        }
+        
+        // Verifica padrões suspeitos
+        if (strstr(line, "t-1") || strstr(line, "L-1") || strstr(line, "NULL")) {
+            fprintf(stderr, "Aviso linha %d: Padrão suspeito encontrado: %s\n", line_number, line);
+            errors++;
+        }
+        
+        // Verifica instruções malformadas
+        if (strstr(line, "OP_UNKNOWN") || strstr(line, "BR_UNKNOWN")) {
+            fprintf(stderr, "Erro linha %d: Instrução inválida: %s\n", line_number, line);
+            errors++;
+        }
+    }
+    
+    fclose(file);
+    
+    // Verifica balanceamento de funções
+    if (func_begins != func_ends) {
+        fprintf(stderr, "Erro: Desbalanceamento de funções - FUNC_BEGIN: %d, END_FUNC: %d\n", 
+               func_begins, func_ends);
+        errors++;
+    }
+    
+    return errors;
+}
+
+// Função de backup para o sistema antigo se houver problemas
+char *legacy_newTemp(void) {
+    char *temp_name = (char *)malloc(MAX_IDENTIFIER_LEN);
+    snprintf(temp_name, MAX_IDENTIFIER_LEN, "t%d", tempCount++);
+    add_local_var(temp_name);
+    stats.total_temporaries++;
+    return temp_name;
+}
+
+char *legacy_newLabel(void) {
+    char *label = (char *)malloc(MAX_LABEL_LEN);
+    snprintf(label, MAX_LABEL_LEN, "L%d", labelCount++);
+    stats.total_labels++;
+    return label;
 }

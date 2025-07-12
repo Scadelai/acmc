@@ -3,14 +3,17 @@
 // Function: gcd
 // Parameters: u (param1), v (param2)
 // Return: result
-FUNC_BEGIN gcd, 2
-  PARAM u
-  PARAM v
-  LOCAL t1, t2, t3, t4 // Declare temporaries as locals
+FUNC_BEGIN gcd, 2, __, __
+  PARAM u, __, __, __
+  PARAM v, __, __, __
+  LOCAL t1, __, __, __
+  LOCAL t2, __, __, __
+  LOCAL t3, __, __, __
+  LOCAL t4, __, __, __
 
   // if v == 0 goto L1_gcd_ret_u
-  CMP v, 0
-  BR_EQ L1_gcd_ret_u
+  CMP v, 0, __
+  BR_EQ L1_gcd_ret_u, __, __
 
   // t1 = u / v
   DIV t1, u, v
@@ -22,46 +25,48 @@ FUNC_BEGIN gcd, 2
   SUB t3, u, t2
 
   // t4 = call gcd(v, t3)
-  ARG v
-  ARG t3
-  CALL gcd, 2
-  STORE_RET t4 // Store return value of the call into t4
+  ARG v, __, __
+  ARG t3, __, __
+  CALL gcd, 2, __
+  STORE_RET t4, __, __ // Store return value of the call into t4
 
   // return t4
-  RETURN t4
-  GOTO L_gcd_end // End of 'if' block
+  RETURN t4, __, __
+  GOTO L_gcd_end, __, __ // End of 'if' block
 
 L1_gcd_ret_u:
   // return u
-  RETURN u
+  RETURN u, __, __
 
 L_gcd_end:
-END_FUNC gcd
+END_FUNC gcd, __, __, __
 
 // Function: main
 // Parameters: none
 // Return: void
-FUNC_BEGIN main, 0
-  LOCAL x, y, t5 // Declare locals
+FUNC_BEGIN main, 0, __, __
+  LOCAL x, __, __, __
+  LOCAL y, __, __, __
+  LOCAL t5, __, __, __
 
   // x = call input()
-  CALL input, 0
-  STORE_RET x
+  CALL input, 0, __
+  STORE_RET x, __, __
 
   // y = call input()
-  CALL input, 0
-  STORE_RET y
+  CALL input, 0, __
+  STORE_RET y, __, __
 
   // t5 = call gcd(x, y)
-  ARG x
-  ARG y
-  CALL gcd, 2
-  STORE_RET t5
+  ARG x, __, __
+  ARG y, __, __
+  CALL gcd, 2, __
+  STORE_RET t5, __, __
 
   // call output(t5)
-  ARG t5
-  CALL output, 1 // Call output with 1 argument
+  ARG t5, __, __
+  CALL output, 1, __ // Call output with 1 argument
 
   // return
-  RETURN_VOID
-END_FUNC main
+  RETURN_VOID, __, __, __
+END_FUNC main, __, __, __

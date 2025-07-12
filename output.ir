@@ -1,86 +1,42 @@
-GLOBAL_ARRAY vet, 10
-
-FUNC_BEGIN minloc, 3
-  PARAM a
-  PARAM low
-  PARAM high
-  LOCAL k, t0, x, t1, i, t2, t3, t4
-  MOV k, low
-  LOAD_ARRAY t0, a, low
-  MOV x, t0
-  ADD t1, low, 1
-  MOV i, t1
-  L0: // Condição do while
-  CMP i, high
-  BR_GE L1
-  LOAD_ARRAY t2, a, i
-  CMP t2, x
-  BR_GE L2
-  LOAD_ARRAY t3, a, i
-  MOV x, t3
-  MOV k, i
-  L2:
-  ADD t4, i, 1
-  MOV i, t4
-  GOTO L0
+FUNC_BEGIN gcd, 2, __, __
+  PARAM u, __, __, __
+  PARAM v, __, __, __
+  LOCAL t0, __, __, __
+  LOCAL t1, __, __, __
+  LOCAL t2, __, __, __
+  LOCAL t3, __, __, __
+  CMP v, 0, __
+  BR_NE L0, __, __
+  GOTO L1, __, __
+  L0:
+  DIV t0, u, v
+  MUL t1, t0, v
+  SUB t2, u, t1
+  ARG v, __, __
+  ARG t2, __, __
+  CALL gcd, 2, __
+  STORE_RET t3, __, __
+  RETURN t3, __, __
   L1:
-  RETURN k
-END_FUNC minloc
+END_FUNC gcd, __, __, __
 
-FUNC_BEGIN sort, 3
-  PARAM a
-  PARAM low
-  PARAM high
-  LOCAL i, t0, t1, k, t2, t, t3, t4
-  MOV i, low
-  L0: // Condição do while
-  SUB t0, high, 1
-  CMP i, t0
-  BR_GE L1
-  ARG a
-  ARG i
-  ARG high
-  CALL minloc, 3
-  STORE_RET t1
-  MOV k, t1
-  LOAD_ARRAY t2, a, k
-  MOV t, t2
-  LOAD_ARRAY t3, a, i
-  STORE_ARRAY a, k, t3
-  STORE_ARRAY a, i, t
-  ADD t4, i, 1
-  MOV i, t4
-  GOTO L0
-  L1:
-END_FUNC sort
-
-FUNC_BEGIN main, 0
-  LOCAL i, t0, t1, t2, t3
-  MOV i, 0
-  L0: // Condição do while
-  CMP i, 10
-  BR_GE L1
-  CALL input, 0
-  STORE_RET t0
-  STORE_ARRAY vet, i, t0
-  ADD t1, i, 1
-  MOV i, t1
-  GOTO L0
-  L1:
-  ARG vet
-  ARG 0
-  ARG 10
-  CALL sort, 3
-  MOV i, 0
-  L2: // Condição do while
-  CMP i, 10
-  BR_GE L3
-  LOAD_ARRAY t2, vet, i
-  ARG t2
-  CALL output, 1
-  ADD t3, i, 1
-  MOV i, t3
-  GOTO L2
-  L3:
-END_FUNC main
+FUNC_BEGIN main, 0, __, __
+  LOCAL t0, __, __, __
+  LOCAL x, __, __, __
+  LOCAL t1, __, __, __
+  LOCAL y, __, __, __
+  LOCAL t2, __, __, __
+  CALL input, 0, __
+  STORE_RET t0, __, __
+  MOV x, t0, __
+  CALL input, 0, __
+  STORE_RET t1, __, __
+  MOV y, t1, __
+  ARG x, __, __
+  ARG y, __, __
+  CALL gcd, 2, __
+  STORE_RET t2, __, __
+  ARG t2, __, __
+  CALL output, 1, __
+END_FUNC main, __, __, __
 

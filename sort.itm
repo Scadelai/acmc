@@ -1,100 +1,114 @@
-GLOBAL_ARRAY vet, 10 // Global array declaration
+GLOBAL_ARRAY vet, 10, __, __ // Global array declaration
 
 // Function: minloc
 // Parameters: a, low, high
 // Return: k
-FUNC_BEGIN minloc, 3
-  PARAM a        // array base address or reference
-  PARAM low
-  PARAM high
-  LOCAL k, x, i, t1, t2, t3, t4, t5 // Temporaries become locals
+FUNC_BEGIN minloc, 3, __, __
+  PARAM a, __, __, __        // array base address or reference
+  PARAM low, __, __, __
+  PARAM high, __, __, __
+  LOCAL k, __, __, __
+  LOCAL x, __, __, __
+  LOCAL i, __, __, __
+  LOCAL t1, __, __, __
+  LOCAL t2, __, __, __
+  LOCAL t3, __, __, __
+  LOCAL t4, __, __, __
+  LOCAL t5, __, __, __
 
   // k = low
-  MOV k, low
+  MOV k, low, __
 
   // t1 = a[low]
   LOAD_ARRAY t1, a, low // Load value from array 'a' at index 'low'
 
   // x = t1
-  MOV x, t1
+  MOV x, t1, __
 
   // t2 = low + 1
   ADD t2, low, 1
 
   // i = t2
-  MOV i, t2
+  MOV i, t2, __
 
 L1_minloc_loop: // Original L1
   // if i >= high goto L2_minloc_ret_k
-  CMP i, high
-  BR_GE L2_minloc_ret_k // Branch if i >= high
+  CMP i, high, __
+  BR_GE L2_minloc_ret_k, __, __ // Branch if i >= high
 
   // t3 = a[i]
   LOAD_ARRAY t3, a, i
 
   // if t3 >= x goto L3_minloc_skip_update
-  CMP t3, x
-  BR_GE L3_minloc_skip_update // Branch if t3 >= x
+  CMP t3, x, __
+  BR_GE L3_minloc_skip_update, __, __ // Branch if t3 >= x
 
   // This block executes if t3 < x
   // t4 = a[i]
   LOAD_ARRAY t4, a, i
 
   // x = t4
-  MOV x, t4
+  MOV x, t4, __
 
   // k = i
-  MOV k, i
+  MOV k, i, __
 
 L3_minloc_skip_update: // Original L3 (after potential update of x and k, or if skipped)
   // t5 = i + 1
   ADD t5, i, 1
 
   // i = t5
-  MOV i, t5
+  MOV i, t5, __
 
-  GOTO L1_minloc_loop // Loop back
+  GOTO L1_minloc_loop, __, __ // Loop back
 
 L2_minloc_ret_k: // Original L2
   // return k
-  RETURN k
-END_FUNC minloc
+  RETURN k, __, __
+END_FUNC minloc, __, __, __
 
 // Function: sort
 // Parameters: a, low, high
 // Return: void
-FUNC_BEGIN sort, 3
-  PARAM a
-  PARAM low
-  PARAM high
-  LOCAL i, k, t, t6, t7, t8, t9, t10 // Temporaries become locals
+FUNC_BEGIN sort, 3, __, __
+  PARAM a, __, __, __
+  PARAM low, __, __, __
+  PARAM high, __, __, __
+  LOCAL i, __, __, __
+  LOCAL k, __, __, __
+  LOCAL t, __, __, __
+  LOCAL t6, __, __, __
+  LOCAL t7, __, __, __
+  LOCAL t8, __, __, __
+  LOCAL t9, __, __, __
+  LOCAL t10, __, __, __
 
   // i = low
-  MOV i, low
+  MOV i, low, __
 
 L4_sort_loop: // Original L4
   // t6 = high - 1
   SUB t6, high, 1
 
   // if i >= t6 goto L5_sort_ret
-  CMP i, t6
-  BR_GE L5_sort_ret // Branch if i >= (high - 1)
+  CMP i, t6, __
+  BR_GE L5_sort_ret, __, __ // Branch if i >= (high - 1)
 
   // t7 = call minloc(a, i, high)
-  ARG a
-  ARG i
-  ARG high
-  CALL minloc, 3
-  STORE_RET t7 // Store result of minloc into t7
+  ARG a, __, __
+  ARG i, __, __
+  ARG high, __, __
+  CALL minloc, 3, __
+  STORE_RET t7, __, __ // Store result of minloc into t7
 
   // k = t7
-  MOV k, t7
+  MOV k, t7, __
 
   // t8 = a[k] (original t = a[k])
   LOAD_ARRAY t8, a, k
 
   // t = t8
-  MOV t, t8
+  MOV t, t8, __
 
   // t9 = a[i] (original temp_val_ai = a[i])
   LOAD_ARRAY t9, a, i
@@ -109,32 +123,36 @@ L4_sort_loop: // Original L4
   ADD t10, i, 1
 
   // i = t10
-  MOV i, t10
+  MOV i, t10, __
 
-  GOTO L4_sort_loop // Loop back
+  GOTO L4_sort_loop, __, __ // Loop back
 
 L5_sort_ret: // Original L5
   // return
-  RETURN_VOID
-END_FUNC sort
+  RETURN_VOID, __, __, __
+END_FUNC sort, __, __, __
 
 // Function: main
 // Parameters: none
 // Return: void
-FUNC_BEGIN main, 0
-  LOCAL i, t11, t12, t13, t14 // Temporaries become locals
+FUNC_BEGIN main, 0, __, __
+  LOCAL i, __, __, __
+  LOCAL t11, __, __, __
+  LOCAL t12, __, __, __
+  LOCAL t13, __, __, __
+  LOCAL t14, __, __, __
 
   // i = 0
-  MOV i, 0
+  MOV i, 0, __
 
 L6_main_input_loop: // Original L6
   // if i >= 10 goto L7_main_call_sort
-  CMP i, 10
-  BR_GE L7_main_call_sort // Branch if i >= 10
+  CMP i, 10, __
+  BR_GE L7_main_call_sort, __, __ // Branch if i >= 10
 
   // t11 = call input()
-  CALL input, 0
-  STORE_RET t11
+  CALL input, 0, __
+  STORE_RET t11, __, __
 
   // vet[i] = t11
   STORE_ARRAY vet, i, t11 // Store t11 into global array vet at index i
@@ -143,41 +161,41 @@ L6_main_input_loop: // Original L6
   ADD t12, i, 1
 
   // i = t12
-  MOV i, t12
+  MOV i, t12, __
 
-  GOTO L6_main_input_loop // Loop back
+  GOTO L6_main_input_loop, __, __ // Loop back
 
 L7_main_call_sort: // Original L7
   // call sort(vet, 0, 10)
-  ARG vet // Pass reference/base address of global array vet
-  ARG 0
-  ARG 10
-  CALL sort, 3
+  ARG vet, __, __ // Pass reference/base address of global array vet
+  ARG 0, __, __
+  ARG 10, __, __
+  CALL sort, 3, __
 
   // i = 0 (reset i for the output loop)
-  MOV i, 0
+  MOV i, 0, __
 
 L8_main_output_loop: // Original L8
   // if i >= 10 goto L9_main_ret
-  CMP i, 10
-  BR_GE L9_main_ret // Branch if i >= 10
+  CMP i, 10, __
+  BR_GE L9_main_ret, __, __ // Branch if i >= 10
 
   // t13 = vet[i]
   LOAD_ARRAY t13, vet, i // Load from global array vet
 
   // call output(t13)
-  ARG t13
-  CALL output, 1
+  ARG t13, __, __
+  CALL output, 1, __
 
   // t14 = i + 1
   ADD t14, i, 1
 
   // i = t14
-  MOV i, t14
+  MOV i, t14, __
 
-  GOTO L8_main_output_loop // Loop back
+  GOTO L8_main_output_loop, __, __ // Loop back
 
 L9_main_ret: // Original L9
   // return
-  RETURN_VOID
-END_FUNC main
+  RETURN_VOID, __, __, __
+END_FUNC main, __, __, __

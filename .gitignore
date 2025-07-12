@@ -61,3 +61,11 @@ dkms.conf
 .vscode/settings.json
 CompiladorMatheus/
 CompiladorWladimir/
+
+# Miscellaneous
+*.log
+*.tmp
+*.bak
+
+# Compiler executable
+acmc
