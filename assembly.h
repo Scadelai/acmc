@@ -30,20 +30,62 @@ typedef enum {
 
 // Assembly instruction types
 typedef enum {
-    INSTR_ADD,    // Add
-    INSTR_ADDI,   // Add immediate
-    INSTR_SUB,    // Subtract
-    INSTR_MULT,   // Multiply
-    INSTR_DIV,    // Divide
-    INSTR_LW,     // Load word
-    INSTR_SW,     // Store word
-    INSTR_SETI,   // Set immediate
-    INSTR_BEQZ,   // Branch if equal to zero
-    INSTR_JUMP,   // Jump
-    INSTR_JAL,    // Jump and link
-    INSTR_JR,     // Jump register
-    INSTR_INPUT,  // Input operation
-    INSTR_OUTPUT  // Output operation
+    // Arithmetic and Logic Instructions
+    INSTR_ADD,      // Add (000000)
+    INSTR_SUB,      // Subtract (000001)
+    INSTR_MULT,     // Multiply (000010)
+    INSTR_DIV,      // Divide (000011)
+    INSTR_AND,      // Bitwise AND (000100)
+    INSTR_OR,       // Bitwise OR (000101)
+    INSTR_SLL,      // Shift left logical (000110)
+    INSTR_SRL,      // Shift right logical (000111)
+    INSTR_SLT,      // Set less than (001000)
+    
+    // Move Instructions
+    INSTR_MFHI,     // Move from HI register (001001)
+    INSTR_MFLO,     // Move from LO register (001010)
+    INSTR_MOVE,     // Move register (001011)
+    
+    // Jump Instructions
+    INSTR_JR,       // Jump register (001100)
+    INSTR_JALR,     // Jump and link register (001101)
+    INSTR_J,        // Jump (011100)
+    INSTR_JAL,      // Jump and link (011101)
+    
+    // Immediate Instructions
+    INSTR_LA,       // Load address (001110)
+    INSTR_ADDI,     // Add immediate (001111)
+    INSTR_SUBI,     // Subtract immediate (010000)
+    INSTR_ANDI,     // AND immediate (010001)
+    INSTR_ORI,      // OR immediate (010010)
+    INSTR_LI,       // Load immediate (011011)
+    
+    // Branch Instructions
+    INSTR_BEQ,      // Branch if equal (010011)
+    INSTR_BNE,      // Branch if not equal (010100)
+    INSTR_BGT,      // Branch if greater than (010101)
+    INSTR_BGTE,     // Branch if greater than or equal (010110)
+    INSTR_BLT,      // Branch if less than (010111)
+    INSTR_BLTE,     // Branch if less than or equal (011000)
+    INSTR_BEQZ,     // Branch if equal to zero (custom)
+    
+    // Memory Instructions
+    INSTR_LW,       // Load word (011001)
+    INSTR_SW,       // Store word (011010)
+    
+    // I/O Instructions
+    INSTR_OUTPUTMEM,  // Output memory (011111)
+    INSTR_OUTPUTREG,  // Output register (100000)
+    INSTR_OUTPUTRESET, // Output reset (100001)
+    INSTR_INPUT,      // Input (100010)
+    
+    // Control Instructions
+    INSTR_HALT,     // Halt processor (011110)
+    
+    // Legacy/Compatibility
+    INSTR_JUMP,     // Legacy jump (mapped to J)
+    INSTR_SETI,     // Legacy set immediate (mapped to LI)
+    INSTR_OUTPUT    // Legacy output (mapped to OUTPUTREG)
 } InstructionType;
 
 // Assembly instruction structure

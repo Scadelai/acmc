@@ -91,20 +91,63 @@ const char* getRegisterName(RegisterType reg) {
 // Get instruction name for output
 const char* getInstructionName(InstructionType instr) {
     switch (instr) {
+        // Arithmetic and Logic Instructions
         case INSTR_ADD:    return "add";
-        case INSTR_ADDI:   return "addi";
         case INSTR_SUB:    return "sub";
         case INSTR_MULT:   return "mult";
         case INSTR_DIV:    return "div";
+        case INSTR_AND:    return "and";
+        case INSTR_OR:     return "or";
+        case INSTR_SLL:    return "sll";
+        case INSTR_SRL:    return "srl";
+        case INSTR_SLT:    return "slt";
+        
+        // Move Instructions
+        case INSTR_MFHI:   return "mfhi";
+        case INSTR_MFLO:   return "mflo";
+        case INSTR_MOVE:   return "move";
+        
+        // Jump Instructions
+        case INSTR_JR:     return "jr";
+        case INSTR_JALR:   return "jalr";
+        case INSTR_J:      return "j";
+        case INSTR_JAL:    return "jal";
+        
+        // Immediate Instructions
+        case INSTR_LA:     return "la";
+        case INSTR_ADDI:   return "addi";
+        case INSTR_SUBI:   return "subi";
+        case INSTR_ANDI:   return "andi";
+        case INSTR_ORI:    return "ori";
+        case INSTR_LI:     return "li";
+        
+        // Branch Instructions
+        case INSTR_BEQ:    return "beq";
+        case INSTR_BNE:    return "bne";
+        case INSTR_BGT:    return "bgt";
+        case INSTR_BGTE:   return "bgte";
+        case INSTR_BLT:    return "blt";
+        case INSTR_BLTE:   return "blte";
+        case INSTR_BEQZ:   return "beqz";
+        
+        // Memory Instructions
         case INSTR_LW:     return "lw";
         case INSTR_SW:     return "sw";
-        case INSTR_SETI:   return "seti";
-        case INSTR_BEQZ:   return "beqz";
-        case INSTR_JUMP:   return "jump";
-        case INSTR_JAL:    return "jal";
-        case INSTR_JR:     return "jr";
-        case INSTR_INPUT:  return "input";
-        case INSTR_OUTPUT: return "output";
+        
+        // I/O Instructions
+        case INSTR_OUTPUTMEM:   return "outputmem";
+        case INSTR_OUTPUTREG:   return "outputreg";
+        case INSTR_OUTPUTRESET: return "outputreset";
+        case INSTR_INPUT:       return "input";
+        
+        // Control Instructions
+        case INSTR_HALT:   return "halt";
+        
+        // Legacy/Compatibility
+        case INSTR_JUMP:   return "j";        // Map to J instruction
+        case INSTR_SETI:   return "li";       // Map to LI instruction
+        case INSTR_OUTPUT: return "outputreg"; // Map to OUTPUTREG instruction
+        
         default:           return "nop";
     }
 }
@@ -153,58 +196,163 @@ void emitInstruction(AssemblyContext *ctx, InstructionType op,
     fprintf(ctx->output_file, "%d-", ctx->instruction_count);
     
     switch (op) {
-        case INSTR_JUMP:
-            fprintf(ctx->output_file, "jump %d\n", immediate);
+        // Arithmetic and Logic Instructions - Three register format
+        case INSTR_ADD:
+            fprintf(ctx->output_file, "add %s %s %s\n", 
+                   getRegisterName(rd), getRegisterName(rs), getRegisterName(rt));
+            break;
+        case INSTR_SUB:
+            fprintf(ctx->output_file, "sub %s %s %s\n", 
+                   getRegisterName(rd), getRegisterName(rs), getRegisterName(rt));
+            break;
+        case INSTR_AND:
+            fprintf(ctx->output_file, "and %s %s %s\n", 
+                   getRegisterName(rd), getRegisterName(rs), getRegisterName(rt));
+            break;
+        case INSTR_OR:
+            fprintf(ctx->output_file, "or %s %s %s\n", 
+                   getRegisterName(rd), getRegisterName(rs), getRegisterName(rt));
+            break;
+        case INSTR_SLT:
+            fprintf(ctx->output_file, "slt %s %s %s\n", 
+                   getRegisterName(rd), getRegisterName(rs), getRegisterName(rt));
+            break;
+            
+        // Multiply/Divide - Two register format (result in HI:LO)
+        case INSTR_MULT:
+            fprintf(ctx->output_file, "mult %s %s\n", 
+                   getRegisterName(rs), getRegisterName(rt));
+            break;
+        case INSTR_DIV:
+            fprintf(ctx->output_file, "div %s %s\n", 
+                   getRegisterName(rs), getRegisterName(rt));
+            break;
+            
+        // Shift Instructions - Register, shift amount format
+        case INSTR_SLL:
+            fprintf(ctx->output_file, "sll %s %s %d\n", 
+                   getRegisterName(rd), getRegisterName(rs), immediate);
+            break;
+        case INSTR_SRL:
+            fprintf(ctx->output_file, "srl %s %s %d\n", 
+                   getRegisterName(rd), getRegisterName(rs), immediate);
+            break;
+            
+        // Move Instructions
+        case INSTR_MFHI:
+            fprintf(ctx->output_file, "mfhi %s\n", getRegisterName(rd));
+            break;
+        case INSTR_MFLO:
+            fprintf(ctx->output_file, "mflo %s\n", getRegisterName(rd));
+            break;
+        case INSTR_MOVE:
+            fprintf(ctx->output_file, "move %s %s\n", 
+                   getRegisterName(rd), getRegisterName(rs));
+            break;
+            
+        // Jump Instructions
+        case INSTR_JR:
+            fprintf(ctx->output_file, "jr %s\n", getRegisterName(rs));
+            break;
+        case INSTR_JALR:
+            fprintf(ctx->output_file, "jalr %s\n", getRegisterName(rs));
+            break;
+        case INSTR_J:
+        case INSTR_JUMP: // Legacy compatibility
+            fprintf(ctx->output_file, "j %d\n", immediate);
             break;
         case INSTR_JAL:
             fprintf(ctx->output_file, "jal %d\n", immediate);
             break;
-        case INSTR_JR:
-            fprintf(ctx->output_file, "jr %s %s %s\n", 
-                   getRegisterName(rs), getRegisterName(rt), getRegisterName(rd));
-            break;
-        case INSTR_LW:
-            fprintf(ctx->output_file, "lw %s %s %d\n", 
-                   getRegisterName(rs), getRegisterName(rt), immediate);
-            break;
-        case INSTR_SW:
-            fprintf(ctx->output_file, "sw %s %s %d\n", 
-                   getRegisterName(rs), getRegisterName(rt), immediate);
+            
+        // Immediate Instructions
+        case INSTR_LA:
+            fprintf(ctx->output_file, "la %s %d\n", 
+                   getRegisterName(rt), immediate);
             break;
         case INSTR_ADDI:
             fprintf(ctx->output_file, "addi %s %s %d\n", 
+                   getRegisterName(rt), getRegisterName(rs), immediate);
+            break;
+        case INSTR_SUBI:
+            fprintf(ctx->output_file, "subi %s %s %d\n", 
+                   getRegisterName(rt), getRegisterName(rs), immediate);
+            break;
+        case INSTR_ANDI:
+            fprintf(ctx->output_file, "andi %s %s %d\n", 
+                   getRegisterName(rt), getRegisterName(rs), immediate);
+            break;
+        case INSTR_ORI:
+            fprintf(ctx->output_file, "ori %s %s %d\n", 
+                   getRegisterName(rt), getRegisterName(rs), immediate);
+            break;
+        case INSTR_LI:
+        case INSTR_SETI: // Legacy compatibility
+            fprintf(ctx->output_file, "li %s %d\n", 
+                   getRegisterName(rt), immediate);
+            break;
+            
+        // Branch Instructions
+        case INSTR_BEQ:
+            fprintf(ctx->output_file, "beq %s %s %d\n", 
                    getRegisterName(rs), getRegisterName(rt), immediate);
             break;
-        case INSTR_SETI:
-            fprintf(ctx->output_file, "seti %s %s %d\n", 
+        case INSTR_BNE:
+            fprintf(ctx->output_file, "bne %s %s %d\n", 
+                   getRegisterName(rs), getRegisterName(rt), immediate);
+            break;
+        case INSTR_BGT:
+            fprintf(ctx->output_file, "bgt %s %s %d\n", 
+                   getRegisterName(rs), getRegisterName(rt), immediate);
+            break;
+        case INSTR_BGTE:
+            fprintf(ctx->output_file, "bgte %s %s %d\n", 
+                   getRegisterName(rs), getRegisterName(rt), immediate);
+            break;
+        case INSTR_BLT:
+            fprintf(ctx->output_file, "blt %s %s %d\n", 
+                   getRegisterName(rs), getRegisterName(rt), immediate);
+            break;
+        case INSTR_BLTE:
+            fprintf(ctx->output_file, "blte %s %s %d\n", 
                    getRegisterName(rs), getRegisterName(rt), immediate);
             break;
         case INSTR_BEQZ:
-            fprintf(ctx->output_file, "beqz %s %s %d\n", 
-                   getRegisterName(rs), getRegisterName(rt), immediate);
+            fprintf(ctx->output_file, "beqz %s %d\n", 
+                   getRegisterName(rs), immediate);
+            break;
+            
+        // Memory Instructions
+        case INSTR_LW:
+            fprintf(ctx->output_file, "lw %s %d(%s)\n", 
+                   getRegisterName(rt), immediate, getRegisterName(rs));
+            break;
+        case INSTR_SW:
+            fprintf(ctx->output_file, "sw %s %d(%s)\n", 
+                   getRegisterName(rt), immediate, getRegisterName(rs));
+            break;
+            
+        // I/O Instructions
+        case INSTR_OUTPUTMEM:
+            fprintf(ctx->output_file, "outputmem %s %d\n", 
+                   getRegisterName(rs), immediate);
+            break;
+        case INSTR_OUTPUTREG:
+        case INSTR_OUTPUT: // Legacy compatibility
+            fprintf(ctx->output_file, "outputreg %s\n", getRegisterName(rs));
+            break;
+        case INSTR_OUTPUTRESET:
+            fprintf(ctx->output_file, "outputreset\n");
             break;
         case INSTR_INPUT:
-            fprintf(ctx->output_file, "input %s\n", getRegisterName(rs));
+            fprintf(ctx->output_file, "input %s\n", getRegisterName(rd));
             break;
-        case INSTR_OUTPUT:
-            fprintf(ctx->output_file, "output %s\n", getRegisterName(rs));
+            
+        // Control Instructions
+        case INSTR_HALT:
+            fprintf(ctx->output_file, "halt\n");
             break;
-        case INSTR_ADD:
-            fprintf(ctx->output_file, "add %s %s %s\n", 
-                   getRegisterName(rs), getRegisterName(rt), getRegisterName(rd));
-            break;
-        case INSTR_SUB:
-            fprintf(ctx->output_file, "sub %s %s %s\n", 
-                   getRegisterName(rs), getRegisterName(rt), getRegisterName(rd));
-            break;
-        case INSTR_MULT:
-            fprintf(ctx->output_file, "mult %s %s %s\n", 
-                   getRegisterName(rs), getRegisterName(rt), getRegisterName(rd));
-            break;
-        case INSTR_DIV:
-            fprintf(ctx->output_file, "div %s %s %s\n", 
-                   getRegisterName(rs), getRegisterName(rt), getRegisterName(rd));
-            break;
+            
         default:
             fprintf(ctx->output_file, "nop\n");
             break;

@@ -72,9 +72,9 @@ void generateAssemblyFromIRImproved(const char *ir_file, const char *assembly_fi
     // Restore frame and return
     fprintf(out, "%d-addi r29 r30 0\n", line_num++);
     fprintf(out, "%d-lw r29 r29 0\n", line_num++);
-    fprintf(out, "%d-addi r30 r30 -1\n", line_num++);
+    fprintf(out, "%d-subi r30 r30 1\n", line_num++);
     fprintf(out, "%d-lw r30 r3 0\n", line_num++);
-    fprintf(out, "%d-addi r30 r30 -1\n", line_num++);
+    fprintf(out, "%d-subi r30 r30 1\n", line_num++);
     fprintf(out, "%d-lw r30 r1 0\n", line_num++);
     
     // Return
@@ -116,9 +116,9 @@ void generateAssemblyFromIRImproved(const char *ir_file, const char *assembly_fi
     // Restore frame
     fprintf(out, "%d-addi r29 r30 0\n", line_num++);
     fprintf(out, "%d-lw r29 r29 0\n", line_num++);
-    fprintf(out, "%d-addi r30 r30 -1\n", line_num++);
+    fprintf(out, "%d-subi r30 r30 1\n", line_num++);
     fprintf(out, "%d-lw r30 r2 0\n", line_num++);
-    fprintf(out, "%d-addi r30 r30 -1\n", line_num++);
+    fprintf(out, "%d-subi r30 r30 1\n", line_num++);
     fprintf(out, "%d-lw r30 r1 0\n", line_num++);
     
     // Output result
