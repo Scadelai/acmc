@@ -84,7 +84,7 @@ TreeNode *newExpNode(ExpKind kind) {
 }
 
 // Cria uma cópia de uma string, alocando a memória necessária para ela
-char *copyString(char *s) {
+char *copyString(const char *s) {
   int n;
   char *t;
   if (s == NULL) {

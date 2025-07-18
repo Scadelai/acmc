@@ -18,6 +18,9 @@ typedef struct globalVarRec {
 void codeGen(TreeNode *syntaxTree, char *irOutputFile);
 void generateIntermediateCode(TreeNode *syntaxTree);
 
+// Assembly generation function
+void generateAssemblyFromIR(const char *irOutputFile);
+
 // Utility functions for code generation
 char *newTemp(void);
 char *newLabel(void);

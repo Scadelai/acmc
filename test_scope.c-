@@ -1,0 +1,37 @@
+/* Test scope management with nested blocks */
+int complex_function(int a, int b) {
+    int outer_var;
+    int result;
+    outer_var = a + b;
+    
+    if (a > b) {
+        int temp_var;  /* This should be in block scope */
+        temp_var = a * 2;
+        result = temp_var + outer_var;
+    } else {
+        int other_temp; /* Different block scope */
+        other_temp = b * 3;
+        result = other_temp + outer_var;
+    }
+    
+    while (result > 10) {
+        int loop_var; /* Loop scope variable */
+        loop_var = result - 5;
+        result = loop_var;
+    }
+    
+    return result;
+}
+
+int main(void) {
+    int x;
+    int y;
+    int answer;
+    
+    x = 8;
+    y = 3;
+    answer = complex_function(x, y);
+    output(answer);
+    
+    return 0;
+}

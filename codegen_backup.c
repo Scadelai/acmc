@@ -21,7 +21,6 @@
 #include "codegen.h"
 #include "util.h"
 #include "symtab.h"
-#include "assembly.h"
 #include <string.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -32,7 +31,7 @@
 #define MAX_FUNC_LOCALS 256
 #define MAX_FUNC_PARAMS 32
 #define MAX_IDENTIFIER_LEN 256
-#define MAX_TEMPORARIES 128  // Maximum temporary variables per function
+#define MAX_REGISTERS 64  // 64 total registers including special ones
 
 // ============================================================================
 // ENHANCED IR STRUCTURES FOR ASSEMBLY GENERATION
@@ -45,14 +44,6 @@ typedef enum {
     TYPE_ARRAY_INT,
     TYPE_UNKNOWN
 } IRType;
-
-// Variable scope classification
-typedef enum {
-    VAR_GLOBAL,
-    VAR_PARAM,
-    VAR_LOCAL,
-    VAR_UNKNOWN
-} VariableScope;
 
 // Address modes for operands
 typedef enum {
@@ -163,7 +154,7 @@ static void init_register_pool() {
     
     register_pool_initialized = 1;
     printf("Register pool initialized with %d registers (%d general purpose)\n", 
-           MAX_REGISTERS, (MAX_REGISTERS - 4));
+           MAX_REGISTERS, MAX_REGISTERS - 4);
 }
 
 // Allocate a register from the pool
@@ -304,20 +295,19 @@ static void add_variable_info(const char *name, IRType type, int is_param) {
     variable_count++;
 }
 
+// Existing compatibility structures
+typedef struct {
+    int total_instructions;
+    int total_temporaries;
+    int total_labels;
+    int total_functions;
+    int optimization_count;
+} CompilationStats;
+
 static FILE *outputFile;
 static int tempCount = 0;    // Contador para variáveis temporárias (reiniciado por função)
 static int labelCount = 0;   // Contador para rótulos (reiniciado por função)
 static GlobalVarList globalVars = NULL; // Lista de variáveis globais
-
-// Temporary register pool for enhanced system
-typedef struct {
-    char name[32];
-    int in_use;
-    int scope_level;
-} TemporaryReg;
-
-static TemporaryReg temp_pool[MAX_TEMPORARIES];
-static int temp_pool_initialized = 0;
 
 // Buffer para código de função - usado para coletar todas as instruções de uma função
 // antes de escrever no arquivo, permitindo gerar declarações LOCAL corretas
@@ -359,8 +349,6 @@ static int is_simple_assignment(TreeNode *tree);
 void print_compilation_stats(void);
 void reset_compilation_stats(void);
 static int validate_ir_file(const char *ir_file);
-static void emit_quad(const char *op, const char *arg1, const char *arg2, const char *arg3);
-static void emit_buffered(const char *instruction_format, ...);
 
 // ============================================================================
 // ENHANCED IR GENERATION FUNCTIONS  
@@ -368,14 +356,7 @@ static void emit_buffered(const char *instruction_format, ...);
 
 // Generate enhanced quadruple with type information
 static void generate_enhanced_quad(const char *op, const char *arg1, const char *arg2, const char *result, IRType result_type) {
-    // Use the enhanced emit_buffered system with proper 4-field quadruple format
-    char quad_instr[256];
-    snprintf(quad_instr, sizeof(quad_instr), "%s %s, %s, %s, %s", op, 
-             arg1 ? arg1 : "__", 
-             arg2 ? arg2 : "__", 
-             result ? result : "__",
-             "__");  // Always include 4th field for consistent format
-    emit_buffered("%s", quad_instr);
+    emitQuadruple(op, arg1, arg2, result);
     
     // Track type information for register allocation
     if (result && result[0] == 'R') {
@@ -398,8 +379,8 @@ static char* allocate_register_for_expression(TreeNode* expr, IRType expected_ty
         return copyString("R1"); // Fallback
     }
     
-    char* reg_name = (char*)malloc(16); // Increased buffer size to avoid truncation
-    snprintf(reg_name, 16, "R%d", reg_num);
+    char* reg_name = (char*)malloc(8);
+    snprintf(reg_name, 8, "R%d", reg_num);
     
     // Set type hint for the register
     register_pool[reg_num].result_type = expected_type;
@@ -428,19 +409,24 @@ static void allocate_variable_enhanced(const char* name, IRType type, int is_par
 static void generate_function_prologue_enhanced(const char* func_name) {
     enter_scope(); // Enter function scope
     
-    char prologue[256];
-    snprintf(prologue, sizeof(prologue), "FUNC_BEGIN %s, %d, __, __", func_name, param_count);
-    emit_buffered("%s", prologue);
+    fprintf(outputFile, "FUNC_BEGIN %s, %d, __, __\n", func_name, param_count);
     
-    // Stack allocation will be handled after we know all variables
+    // Allocate space for local variables
+    if (current_stack_offset > 0) {
+        fprintf(outputFile, "SUB R63, %d, R63, INT\n", current_stack_offset);
+    }
+    
     stats.total_functions++;
 }
 
 // Generate function epilogue with cleanup
 static void generate_function_epilogue_enhanced(const char* func_name) {
-    char epilogue[256];
-    snprintf(epilogue, sizeof(epilogue), "END_FUNC %s, __, __, __", func_name);
-    emit_buffered("%s", epilogue);
+    // Restore stack pointer
+    if (current_stack_offset > 0) {
+        fprintf(outputFile, "ADD R63, %d, R63, INT\n", current_stack_offset);
+    }
+    
+    fprintf(outputFile, "END_FUNC %s, __, __, __\n\n", func_name);
     
     // Reset stack offset for next function
     current_stack_offset = 0;
@@ -494,11 +480,10 @@ static void emit_buffered(const char *instruction_format, ...) {
 // Emite instrução em formato quadrupla (op, arg1, arg2, arg3)
 static void emit_quad(const char *op, const char *arg1, const char *arg2, const char *arg3) {
     char buf[256];
-    snprintf(buf, sizeof(buf), "%s %s, %s, %s, %s", op, 
+    snprintf(buf, sizeof(buf), "%s %s, %s, %s", op, 
              arg1 ? arg1 : "__", 
              arg2 ? arg2 : "__", 
-             arg3 ? arg3 : "__",
-             "__");  // Always add 4th field for consistent quadruple format
+             arg3 ? arg3 : "__");
     emit_buffered("%s", buf);
 }
 
@@ -580,31 +565,29 @@ static void emit_global_decl(const char *name, int size) {
 
 // Esta função é chamada quando o escopo de uma função termina.
 // Escreve as instruções em buffer para o arquivo de saída no formato correto:
+// FUNC_BEGIN com nome e número de parâmetros
+// Declarações PARAM para cada parâmetro
+// Declaração LOCAL com todas as variáveis locais (se houver)
+// Todas as instruções do corpo da função
+// END_FUNC com nome da função
 static void flush_function_buffer() {
     char param_count_str[16];
     snprintf(param_count_str, sizeof(param_count_str), "%d", param_count);
     fprintf(outputFile, "FUNC_BEGIN %s, %s, __, __\n", current_func_name_codegen, param_count_str);
-    
-    // Generate parameter declarations with enhanced tracking
+
     for (int i = 0; i < param_count; ++i) {
         fprintf(outputFile, "  PARAM %s, __, __, __\n", param_list[i]);
-        // Add parameter to enhanced tracking
-        allocate_variable_enhanced(param_list[i], TYPE_INT, 1);
     }
 
-    // Generate LOCAL declarations for enhanced allocated registers
+    // Generate LOCAL declarations in proper quadruple format
     for (int i = 0; i < local_vars_count; ++i) {
         fprintf(outputFile, "  LOCAL %s, __, __, __\n", local_vars_list[i]);
-        // Add local variable to enhanced tracking
-        allocate_variable_enhanced(local_vars_list[i], TYPE_INT, 0);
     }
 
-    // Write all function instructions
     for (int i = 0; i < instruction_buffer_count; ++i) {
         fprintf(outputFile, "  %s\n", instruction_buffer[i]);
         free(instruction_buffer[i]);
     }
-    
     fprintf(outputFile, "END_FUNC %s, __, __, __\n\n", current_func_name_codegen);
 
     // Reinicia buffers para a próxima função
@@ -666,35 +649,25 @@ char *generate_expression_code(TreeNode *tree) {
                 case VarK:
                     if (tree->child[0] != NULL) { // Acesso a array: var[índice]
                         index_expr = generate_expression_code(tree->child[0]);
-                        result_var = allocate_register_for_expression(tree, TYPE_INT);
-                        generate_enhanced_quad("LOAD_ARRAY", tree->attr.name, index_expr, result_var, TYPE_INT);
+                        result_var = newTemp();
+                        emit_quad("LOAD_ARRAY", result_var, tree->attr.name, index_expr);
                     } else { // Variável simples
-                        // Check if variable exists in our enhanced tracking
-                        VariableInfo* var_info = get_variable_info(tree->attr.name);
-                        if (var_info && var_info->reg_hint >= 0) {
-                            // Variable has a register hint, use it
-                            result_var = (char*)malloc(8);
-                            snprintf(result_var, 8, "R%d", var_info->reg_hint);
-                        } else {
-                            result_var = copyString(tree->attr.name);
-                        }
+                        result_var = copyString(tree->attr.name);
+                        // Se é uma variável local não-parâmetro, garante que está na lista local_vars_list
                     }
                     return result_var;
 
                 case OpK: // Operação aritmética ou de comparação
                     left_operand = generate_expression_code(tree->child[0]);
                     right_operand = generate_expression_code(tree->child[1]);
-                    
-                    // Use enhanced register allocation
-                    result_var = allocate_register_for_expression(tree, TYPE_INT);
+                    result_var = newTemp();
                     const char *op_str = get_ir_op_string(tree->attr.opr);
                     if (strcmp(op_str, "OP_UNKNOWN") != 0) { // Aritmética
-                        // Use enhanced quadruple generation with type information
-                        generate_enhanced_quad(op_str, left_operand, right_operand, result_var, TYPE_INT);
+                        emit_quad(op_str, result_var, left_operand, right_operand);
                     } else {
                         fprintf(stderr, "Erro: Operador de comparação usado em contexto de expressão aritmética.\n");
                         // Fallback: trata como movimento simples se deve produzir algo
-                        generate_enhanced_quad("MOV", left_operand, "__", result_var, TYPE_INT); // Enhanced fallback
+                        emit_quad("MOV", result_var, left_operand, NULL); // AVISO: fallback OpK
                     }
                     return result_var;
 
@@ -710,9 +683,9 @@ char *generate_expression_code(TreeNode *tree) {
                             arg_node = arg_node->sibling;
                         }
 
-                        // Emite instruções ARG com enhanced generation
+                        // Emite instruções ARG
                         for (int i = 0; i < arg_count; ++i) {
-                            generate_enhanced_quad("ARG", arg_vars[i], "__", "__", TYPE_UNKNOWN);
+                            emit_quad("ARG", arg_vars[i], NULL, NULL);
                         }
 
                         // Determina se a função retorna um valor.
@@ -722,11 +695,11 @@ char *generate_expression_code(TreeNode *tree) {
 
                         char arg_count_str[16];
                         snprintf(arg_count_str, sizeof(arg_count_str), "%d", arg_count);
-                        generate_enhanced_quad("CALL", tree->attr.name, arg_count_str, "__", is_void_call ? TYPE_VOID : TYPE_INT);
+                        emit_quad("CALL", tree->attr.name, arg_count_str, NULL);
 
                         if (!is_void_call) {
-                            result_var = allocate_register_for_expression(tree, TYPE_INT);
-                            generate_enhanced_quad("STORE_RET", "__", "__", result_var, TYPE_INT);
+                            result_var = newTemp();
+                            emit_quad("STORE_RET", result_var, NULL, NULL);
                             return result_var;
                         } else {
                             return NULL; // Chamada void não produz variável resultado
@@ -760,14 +733,13 @@ static void generate_statement_code(TreeNode *tree) {
                     rhs_var = generate_expression_code(tree->child[1]);
                     if (tree->child[0]->kind.exp == IdK && tree->child[0]->child[0] != NULL) { // Atribuição a array: var[idx] = val
                         idx_expr = generate_expression_code(tree->child[0]->child[0]);
-                        generate_enhanced_quad("STORE_ARRAY", tree->child[0]->attr.name, idx_expr, rhs_var, TYPE_ARRAY_INT);
+                        emit_quad("STORE_ARRAY", tree->child[0]->attr.name, idx_expr, rhs_var);
                     } else { // Atribuição simples: var = val
                         // LHS pode ser IdK ou VarK baseado no parser original
                         if (tree->child[0]->nodekind == ExpK && (tree->child[0]->kind.exp == IdK || tree->child[0]->kind.exp == VarK)) {
                             lhs_var = tree->child[0]->attr.name;
-                            // Use enhanced variable allocation
-                            allocate_variable_enhanced(lhs_var, TYPE_INT, 0);
-                            generate_enhanced_quad("MOV", rhs_var, "__", lhs_var, TYPE_INT);
+                            add_local_var(lhs_var); // Garante que variável LHS está em locais se não for param/global
+                            emit_quad("MOV", lhs_var, rhs_var, NULL);
                         } else {
                             fprintf(stderr, "Erro: LHS da atribuição não é um tipo de variável reconhecido.\n");
                         }
@@ -1014,6 +986,7 @@ void codeGen(TreeNode *syntaxTree, char * irOutputFile) {
     printf("Type System: Enhanced IR with type information\n");
     printf("Memory Management: Stack-based with alignment\n");
     printf("=============================================\n\n");
+    }
     
     globalVars = NULL; // Inicializa lista de variáveis globais
 
@@ -1118,11 +1091,11 @@ void codeGen(TreeNode *syntaxTree, char * irOutputFile) {
     printf("============================\n");
     
     // Cleanup memory
-    MemoryBlock *mem_current = memory_blocks;
-    while (mem_current) {
-        MemoryBlock *next = mem_current->next;
-        free(mem_current);
-        mem_current = next;
+    MemoryBlock *current = memory_blocks;
+    while (current) {
+        MemoryBlock *next = current->next;
+        free(current);
+        current = next;
     }
     memory_blocks = NULL;
 
@@ -1134,11 +1107,6 @@ void codeGen(TreeNode *syntaxTree, char * irOutputFile) {
     int validation_errors = validate_ir_file("output.ir");
     if (validation_errors == 0) {
         printf("✓ Código IR válido gerado com sucesso!\n");
-        
-        // Generate assembly code from IR
-        printf("Gerando código Assembly...\n");
-        generateAssemblyFromIR(irOutputFile);
-        printf("✓ Código Assembly gerado em assembly.txt\n");
     } else {
         printf("⚠ Encontrados %d problemas durante a validação\n", validation_errors);
     }
@@ -1485,9 +1453,4 @@ char *legacy_newLabel(void) {
     snprintf(label, MAX_LABEL_LEN, "L%d", labelCount++);
     stats.total_labels++;
     return label;
-}
-
-// Assembly generation wrapper function
-void generateAssemblyFromIR(const char *irOutputFile) {
-    generateAssemblyFromIRImproved(irOutputFile, "assembly.txt");
 }

@@ -1,0 +1,37 @@
+/* Test scope management with nested blocks */
+int complex(int a, int b) {
+    int outer;
+    int result;
+    outer = a + b;
+    
+    if (a > b) {
+        int temp;
+        temp = a * 2;
+        result = temp + outer;
+    } else {
+        int other;
+        other = b * 3;
+        result = other + outer;
+    }
+    
+    while (result > 10) {
+        int loop;
+        loop = result - 5;
+        result = loop;
+    }
+    
+    return result;
+}
+
+int main(void) {
+    int x;
+    int y;
+    int answer;
+    
+    x = 8;
+    y = 3;
+    answer = complex(x, y);
+    output(answer);
+    
+    return 0;
+}

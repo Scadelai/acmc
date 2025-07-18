@@ -1,42 +1,33 @@
 FUNC_BEGIN gcd, 2, __, __
   PARAM u, __, __, __
   PARAM v, __, __, __
-  LOCAL t0, __, __, __
-  LOCAL t1, __, __, __
-  LOCAL t2, __, __, __
-  LOCAL t3, __, __, __
-  CMP v, 0, __
-  BR_NE L0, __, __
-  GOTO L1, __, __
+  CMP v, 0, __, __
+  BR_NE L0, __, __, __
+  GOTO L1, __, __, __
   L0:
-  DIV t0, u, v
-  MUL t1, t0, v
-  SUB t2, u, t1
-  ARG v, __, __
-  ARG t2, __, __
-  CALL gcd, 2, __
-  STORE_RET t3, __, __
-  RETURN t3, __, __
+  DIV u, v, R1, __
+  MUL R1, v, R2, __
+  SUB u, R2, R3, __
+  ARG v, __, __, __
+  ARG R3, __, __, __
+  CALL gcd, 2, __, __
+  STORE_RET __, __, R4, __
+  RETURN R4, __, __, __
   L1:
 END_FUNC gcd, __, __, __
 
 FUNC_BEGIN main, 0, __, __
-  LOCAL t0, __, __, __
-  LOCAL x, __, __, __
-  LOCAL t1, __, __, __
-  LOCAL y, __, __, __
-  LOCAL t2, __, __, __
-  CALL input, 0, __
-  STORE_RET t0, __, __
-  MOV x, t0, __
-  CALL input, 0, __
-  STORE_RET t1, __, __
-  MOV y, t1, __
-  ARG x, __, __
-  ARG y, __, __
-  CALL gcd, 2, __
-  STORE_RET t2, __, __
-  ARG t2, __, __
-  CALL output, 1, __
+  CALL input, 0, __, __
+  STORE_RET __, __, R7, __
+  MOV R7, __, x, __
+  CALL input, 0, __, __
+  STORE_RET __, __, R9, __
+  MOV R9, __, y, __
+  ARG R8, __, __, __
+  ARG R10, __, __, __
+  CALL gcd, 2, __, __
+  STORE_RET __, __, R11, __
+  ARG R11, __, __, __
+  CALL output, 1, __, __
 END_FUNC main, __, __, __
 

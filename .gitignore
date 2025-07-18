@@ -66,6 +66,7 @@ CompiladorWladimir/
 *.log
 *.tmp
 *.bak
+*.md
 
 # Compiler executable
 acmc

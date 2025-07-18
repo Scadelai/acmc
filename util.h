@@ -11,7 +11,7 @@ TreeNode *newStmtNode(StmtKind);
 TreeNode *newExpNode(ExpKind);
 
 // Cria uma cópia de uma string, alocando a memória necessária para ela
-char *copyString(char *);
+char *copyString(const char *);
 
 // Imprime a árvore sintática no arquivo de listagem utilizando indentação para indicar a hierarquia
 void print_tree(TreeNode *);
