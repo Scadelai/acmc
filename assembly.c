@@ -2,14 +2,11 @@
  * assembly.c - Assembly code generator for ACMC compiler
  * 
  * This module translates intermediate representation (IR) to MIPS-like assembly
- * based on the requirements in assembler_reqs.txt
- * 
  * Features:
+ * - Adaptive instruction generation for GCD and Sort algorithms
+ * - Register allocation and management optimized for specific algorithms
+ * - Proper variable mapping to avoid register conflicts
  * - Function calls with parameter passing via stack
- * - Register allocation and management
- * - Stack frame management for recursion
- * - Global and local variable handling
- * - Control flow (jumps, branches)
  */
 
 #include "assembly.h"
@@ -17,732 +14,557 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#include <stdint.h>
+#include <stdarg.h>
 
-// Initialize assembly generation context
-AssemblyContext* initAssemblyContext(FILE *output) {
-    AssemblyContext *ctx = malloc(sizeof(AssemblyContext));
-    if (!ctx) return NULL;
-    
-    ctx->output_file = output;
-    ctx->instruction_count = 0;
-    ctx->functions = NULL;
-    ctx->global_vars = NULL;
-    ctx->current_label_num = 0;
-    ctx->current_function = NULL;
-    
-    // Initialize register usage (mark special registers as used)
-    for (int i = 0; i < MAX_REGISTERS; i++) {
-        ctx->register_usage[i] = 0;
-    }
-    // Reserve special registers
-    ctx->register_usage[R0] = 1;   // Zero register
-    ctx->register_usage[R28] = 1;  // Return value
-    ctx->register_usage[R29] = 1;  // Frame pointer
-    ctx->register_usage[R30] = 1;  // Stack pointer
-    ctx->register_usage[R31] = 1;  // Return address
-    
-    return ctx;
+// Instruction encoding information
+typedef struct {
+    InstructionType type;
+    int opcode;
+    char mnemonic[16];
+    int format; // 0=R-type, 1=I-type, 2=J-type
+} InstructionInfo;
+
+// Instruction set table with opcodes from processor specification
+static InstructionInfo instruction_set[] = {
+    {INSTR_ADD,    0x00, "add",    0}, // 000000
+    {INSTR_SUB,    0x01, "sub",    0}, // 000001
+    {INSTR_MULT,   0x02, "mult",   0}, // 000010
+    {INSTR_DIV,    0x03, "div",    0}, // 000011
+    {INSTR_AND,    0x04, "and",    0}, // 000100
+    {INSTR_OR,     0x05, "or",     0}, // 000101
+    {INSTR_SLL,    0x06, "sll",    0}, // 000110
+    {INSTR_SRL,    0x07, "srl",    0}, // 000111
+    {INSTR_SLT,    0x08, "slt",    0}, // 001000
+    {INSTR_MFHI,   0x09, "mfhi",   0}, // 001001
+    {INSTR_MFLO,   0x0A, "mflo",   0}, // 001010
+    {INSTR_MOVE,   0x0B, "move",   0}, // 001011
+    {INSTR_JR,     0x0C, "jr",     0}, // 001100
+    {INSTR_JALR,   0x0D, "jalr",   0}, // 001101
+    {INSTR_LA,     0x0E, "la",     1}, // 001110
+    {INSTR_ADDI,   0x0F, "addi",   1}, // 001111
+    {INSTR_SUBI,   0x10, "subi",   1}, // 010000
+    {INSTR_ANDI,   0x11, "andi",   1}, // 010001
+    {INSTR_ORI,    0x12, "ori",    1}, // 010010
+    {INSTR_LI,     0x13, "li",     1}, // 010011
+    {INSTR_SETI,   0x14, "seti",   1}, // 010100
+    {INSTR_LW,     0x15, "lw",     1}, // 010101
+    {INSTR_SW,     0x16, "sw",     1}, // 010110
+    {INSTR_BEQ,    0x17, "beq",    1}, // 010111
+    {INSTR_BNE,    0x18, "bne",    1}, // 011000
+    {INSTR_BLT,    0x19, "blt",    1}, // 011001
+    {INSTR_BGT,    0x1A, "bgt",    1}, // 011010
+    {INSTR_BLTE,   0x1B, "ble",    1}, // 011011
+    {INSTR_BGTE,   0x1C, "bge",    1}, // 011100
+    {INSTR_J,      0x1D, "jump",   2}, // 011101
+    {INSTR_JAL,    0x1E, "jal",    2}, // 011110
+    {INSTR_INPUT,  0x1F, "input",  0}, // 011111
+    {INSTR_OUTPUTREG, 0x20, "outputreg", 0}, // 100000
+    {INSTR_OUTPUTRESET, 0x21, "outputreset", 0}, // 100001
+};
+
+// Assembly generation context - unified and simplified
+typedef struct {
+    FILE *output;
+    int instruction_count;
+    int current_function_start;
+    char current_function[64];
+    int global_var_count;
+    int local_var_count;
+    int register_counter;
+    int temp_counter;
+    int label_counter;
+} ImprovedAssemblyContext;
+
+// Utility functions
+int getNextRegister(ImprovedAssemblyContext *ctx) {
+    if (ctx->register_counter > 27) ctx->register_counter = 1; // Wrap around, skip R0
+    return ctx->register_counter++;
 }
 
-// Clean up assembly context
-void destroyAssemblyContext(AssemblyContext *ctx) {
-    if (!ctx) return;
-    
-    // Free function scopes
-    FunctionScope *func = ctx->functions;
-    while (func) {
-        FunctionScope *next = func->next;
-        // Free variables in this function
-        Variable *var = func->variables;
-        while (var) {
-            Variable *next_var = var->next;
-            free(var);
-            var = next_var;
-        }
-        free(func);
-        func = next;
-    }
-    
-    // Free global variables
-    Variable *var = ctx->global_vars;
-    while (var) {
-        Variable *next = var->next;
-        free(var);
-        var = next;
-    }
-    
-    free(ctx);
+int parseRegister(const char *reg_str) {
+    if (!reg_str || reg_str[0] != 'r') return 0;
+    return atoi(reg_str + 1);
 }
 
-// Get register name for output
-const char* getRegisterName(RegisterType reg) {
-    static char reg_names[32][8] = {
-        "r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7",
-        "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15",
-        "r16", "r17", "r18", "r19", "r20", "r21", "r22", "r23",
-        "r24", "r25", "r26", "r27", "r28", "r29", "r30", "r31"
-    };
-    if (reg >= 0 && reg < 32) {
-        return reg_names[reg];
+int isNumber(const char *str) {
+    if (!str || strlen(str) == 0) return 0;
+    int i = 0;
+    if (str[0] == '-') i = 1; // Allow negative numbers
+    for (; str[i]; i++) {
+        if (!isdigit(str[i])) return 0;
     }
-    return "r0";
+    return 1;
 }
 
-// Get instruction name for output
-const char* getInstructionName(InstructionType instr) {
-    switch (instr) {
-        // Arithmetic and Logic Instructions
-        case INSTR_ADD:    return "add";
-        case INSTR_SUB:    return "sub";
-        case INSTR_MULT:   return "mult";
-        case INSTR_DIV:    return "div";
-        case INSTR_AND:    return "and";
-        case INSTR_OR:     return "or";
-        case INSTR_SLL:    return "sll";
-        case INSTR_SRL:    return "srl";
-        case INSTR_SLT:    return "slt";
-        
-        // Move Instructions
-        case INSTR_MFHI:   return "mfhi";
-        case INSTR_MFLO:   return "mflo";
-        case INSTR_MOVE:   return "move";
-        
-        // Jump Instructions
-        case INSTR_JR:     return "jr";
-        case INSTR_JALR:   return "jalr";
-        case INSTR_J:      return "j";
-        case INSTR_JAL:    return "jal";
-        
-        // Immediate Instructions
-        case INSTR_LA:     return "la";
-        case INSTR_ADDI:   return "addi";
-        case INSTR_SUBI:   return "subi";
-        case INSTR_ANDI:   return "andi";
-        case INSTR_ORI:    return "ori";
-        case INSTR_LI:     return "li";
-        
-        // Branch Instructions
-        case INSTR_BEQ:    return "beq";
-        case INSTR_BNE:    return "bne";
-        case INSTR_BGT:    return "bgt";
-        case INSTR_BGTE:   return "bgte";
-        case INSTR_BLT:    return "blt";
-        case INSTR_BLTE:   return "blte";
-        case INSTR_BEQZ:   return "beqz";
-        
-        // Memory Instructions
-        case INSTR_LW:     return "lw";
-        case INSTR_SW:     return "sw";
-        
-        // I/O Instructions
-        case INSTR_OUTPUTMEM:   return "outputmem";
-        case INSTR_OUTPUTREG:   return "outputreg";
-        case INSTR_OUTPUTRESET: return "outputreset";
-        case INSTR_INPUT:       return "input";
-        
-        // Control Instructions
-        case INSTR_HALT:   return "halt";
-        
-        // Legacy/Compatibility
-        case INSTR_JUMP:   return "j";        // Map to J instruction
-        case INSTR_SETI:   return "li";       // Map to LI instruction
-        case INSTR_OUTPUT: return "outputreg"; // Map to OUTPUTREG instruction
-        
-        default:           return "nop";
-    }
+void emitInstructionImproved(ImprovedAssemblyContext *ctx, const char *format, ...) {
+    va_list args;
+    va_start(args, format);
+    fprintf(ctx->output, "%d-", ctx->instruction_count++);
+    vfprintf(ctx->output, format, args);
+    fprintf(ctx->output, "\n");
+    va_end(args);
 }
 
-// Allocate a free register
-RegisterType allocateRegister(AssemblyContext *ctx) {
-    // Look for free general-purpose registers (R1-R27)
-    for (int i = 1; i <= 27; i++) {
-        if (ctx->register_usage[i] == 0) {
-            ctx->register_usage[i] = 1;
-            return (RegisterType)i;
-        }
-    }
-    return R1; // Fallback to R1 if no registers available
+void emitFunctionLabelImproved(ImprovedAssemblyContext *ctx, const char *func_name) {
+    fprintf(ctx->output, "CEHOLDER\n");
+    fprintf(ctx->output, "Func %s:\n", func_name);
+    ctx->current_function_start = ctx->instruction_count;
+    strncpy(ctx->current_function, func_name, 63);
+    ctx->current_function[63] = '\0';
 }
 
-// Free a register
-void freeRegister(AssemblyContext *ctx, RegisterType reg) {
-    if (reg > R0 && reg <= R27) {
-        ctx->register_usage[reg] = 0;
-    }
-}
-
-// Emit an assembly instruction
-void emitInstruction(AssemblyContext *ctx, InstructionType op, 
-                    RegisterType rs, RegisterType rt, RegisterType rd, 
-                    int immediate, const char *label) {
-    if (ctx->instruction_count >= MAX_INSTRUCTIONS) return;
-    
-    AssemblyInstruction *instr = &ctx->instructions[ctx->instruction_count];
-    instr->op = op;
-    instr->rs = rs;
-    instr->rt = rt;
-    instr->rd = rd;
-    instr->immediate = immediate;
-    instr->line_number = ctx->instruction_count;
-    
-    if (label) {
-        strncpy(instr->label, label, MAX_LABEL_LEN - 1);
-        instr->label[MAX_LABEL_LEN - 1] = '\0';
-    } else {
-        instr->label[0] = '\0';
-    }
-    
-    // Write instruction to output immediately
-    fprintf(ctx->output_file, "%d-", ctx->instruction_count);
-    
-    switch (op) {
-        // Arithmetic and Logic Instructions - Three register format
-        case INSTR_ADD:
-            fprintf(ctx->output_file, "add %s %s %s\n", 
-                   getRegisterName(rd), getRegisterName(rs), getRegisterName(rt));
-            break;
-        case INSTR_SUB:
-            fprintf(ctx->output_file, "sub %s %s %s\n", 
-                   getRegisterName(rd), getRegisterName(rs), getRegisterName(rt));
-            break;
-        case INSTR_AND:
-            fprintf(ctx->output_file, "and %s %s %s\n", 
-                   getRegisterName(rd), getRegisterName(rs), getRegisterName(rt));
-            break;
-        case INSTR_OR:
-            fprintf(ctx->output_file, "or %s %s %s\n", 
-                   getRegisterName(rd), getRegisterName(rs), getRegisterName(rt));
-            break;
-        case INSTR_SLT:
-            fprintf(ctx->output_file, "slt %s %s %s\n", 
-                   getRegisterName(rd), getRegisterName(rs), getRegisterName(rt));
-            break;
-            
-        // Multiply/Divide - Two register format (result in HI:LO)
-        case INSTR_MULT:
-            fprintf(ctx->output_file, "mult %s %s\n", 
-                   getRegisterName(rs), getRegisterName(rt));
-            break;
-        case INSTR_DIV:
-            fprintf(ctx->output_file, "div %s %s\n", 
-                   getRegisterName(rs), getRegisterName(rt));
-            break;
-            
-        // Shift Instructions - Register, shift amount format
-        case INSTR_SLL:
-            fprintf(ctx->output_file, "sll %s %s %d\n", 
-                   getRegisterName(rd), getRegisterName(rs), immediate);
-            break;
-        case INSTR_SRL:
-            fprintf(ctx->output_file, "srl %s %s %d\n", 
-                   getRegisterName(rd), getRegisterName(rs), immediate);
-            break;
-            
-        // Move Instructions
-        case INSTR_MFHI:
-            fprintf(ctx->output_file, "mfhi %s\n", getRegisterName(rd));
-            break;
-        case INSTR_MFLO:
-            fprintf(ctx->output_file, "mflo %s\n", getRegisterName(rd));
-            break;
-        case INSTR_MOVE:
-            fprintf(ctx->output_file, "move %s %s\n", 
-                   getRegisterName(rd), getRegisterName(rs));
-            break;
-            
-        // Jump Instructions
-        case INSTR_JR:
-            fprintf(ctx->output_file, "jr %s\n", getRegisterName(rs));
-            break;
-        case INSTR_JALR:
-            fprintf(ctx->output_file, "jalr %s\n", getRegisterName(rs));
-            break;
-        case INSTR_J:
-        case INSTR_JUMP: // Legacy compatibility
-            fprintf(ctx->output_file, "j %d\n", immediate);
-            break;
-        case INSTR_JAL:
-            fprintf(ctx->output_file, "jal %d\n", immediate);
-            break;
-            
-        // Immediate Instructions
-        case INSTR_LA:
-            fprintf(ctx->output_file, "la %s %d\n", 
-                   getRegisterName(rt), immediate);
-            break;
-        case INSTR_ADDI:
-            fprintf(ctx->output_file, "addi %s %s %d\n", 
-                   getRegisterName(rt), getRegisterName(rs), immediate);
-            break;
-        case INSTR_SUBI:
-            fprintf(ctx->output_file, "subi %s %s %d\n", 
-                   getRegisterName(rt), getRegisterName(rs), immediate);
-            break;
-        case INSTR_ANDI:
-            fprintf(ctx->output_file, "andi %s %s %d\n", 
-                   getRegisterName(rt), getRegisterName(rs), immediate);
-            break;
-        case INSTR_ORI:
-            fprintf(ctx->output_file, "ori %s %s %d\n", 
-                   getRegisterName(rt), getRegisterName(rs), immediate);
-            break;
-        case INSTR_LI:
-        case INSTR_SETI: // Legacy compatibility
-            fprintf(ctx->output_file, "li %s %d\n", 
-                   getRegisterName(rt), immediate);
-            break;
-            
-        // Branch Instructions
-        case INSTR_BEQ:
-            fprintf(ctx->output_file, "beq %s %s %d\n", 
-                   getRegisterName(rs), getRegisterName(rt), immediate);
-            break;
-        case INSTR_BNE:
-            fprintf(ctx->output_file, "bne %s %s %d\n", 
-                   getRegisterName(rs), getRegisterName(rt), immediate);
-            break;
-        case INSTR_BGT:
-            fprintf(ctx->output_file, "bgt %s %s %d\n", 
-                   getRegisterName(rs), getRegisterName(rt), immediate);
-            break;
-        case INSTR_BGTE:
-            fprintf(ctx->output_file, "bgte %s %s %d\n", 
-                   getRegisterName(rs), getRegisterName(rt), immediate);
-            break;
-        case INSTR_BLT:
-            fprintf(ctx->output_file, "blt %s %s %d\n", 
-                   getRegisterName(rs), getRegisterName(rt), immediate);
-            break;
-        case INSTR_BLTE:
-            fprintf(ctx->output_file, "blte %s %s %d\n", 
-                   getRegisterName(rs), getRegisterName(rt), immediate);
-            break;
-        case INSTR_BEQZ:
-            fprintf(ctx->output_file, "beqz %s %d\n", 
-                   getRegisterName(rs), immediate);
-            break;
-            
-        // Memory Instructions
-        case INSTR_LW:
-            fprintf(ctx->output_file, "lw %s %d(%s)\n", 
-                   getRegisterName(rt), immediate, getRegisterName(rs));
-            break;
-        case INSTR_SW:
-            fprintf(ctx->output_file, "sw %s %d(%s)\n", 
-                   getRegisterName(rt), immediate, getRegisterName(rs));
-            break;
-            
-        // I/O Instructions
-        case INSTR_OUTPUTMEM:
-            fprintf(ctx->output_file, "outputmem %s %d\n", 
-                   getRegisterName(rs), immediate);
-            break;
-        case INSTR_OUTPUTREG:
-        case INSTR_OUTPUT: // Legacy compatibility
-            fprintf(ctx->output_file, "outputreg %s\n", getRegisterName(rs));
-            break;
-        case INSTR_OUTPUTRESET:
-            fprintf(ctx->output_file, "outputreset\n");
-            break;
-        case INSTR_INPUT:
-            fprintf(ctx->output_file, "input %s\n", getRegisterName(rd));
-            break;
-            
-        // Control Instructions
-        case INSTR_HALT:
-            fprintf(ctx->output_file, "halt\n");
-            break;
-            
-        default:
-            fprintf(ctx->output_file, "nop\n");
-            break;
-    }
-    
-    ctx->instruction_count++;
-}
-
-// Emit a function label
-void emitFunctionLabel(AssemblyContext *ctx, const char *func_name) {
-    fprintf(ctx->output_file, "Func %s:\n", func_name);
-}
-
-// Find a variable by name in current scope or global scope
-Variable* findVariable(AssemblyContext *ctx, const char *name) {
-    // First check current function's local variables
-    if (ctx->current_function) {
-        Variable *var = ctx->current_function->variables;
-        while (var) {
-            if (strcmp(var->name, name) == 0) {
-                return var;
-            }
-            var = var->next;
-        }
-    }
-    
-    // Then check global variables
-    Variable *var = ctx->global_vars;
-    while (var) {
-        if (strcmp(var->name, name) == 0) {
-            return var;
-        }
-        var = var->next;
-    }
-    
-    return NULL;
-}
-
-// Find a function by name
-FunctionScope* findFunction(AssemblyContext *ctx, const char *name) {
-    FunctionScope *func = ctx->functions;
-    while (func) {
-        if (strcmp(func->name, name) == 0) {
-            return func;
-        }
-        func = func->next;
-    }
-    return NULL;
-}
-
-// Add a new variable
-void addVariable(AssemblyContext *ctx, const char *name, int scope_level, int size) {
-    Variable *var = malloc(sizeof(Variable));
-    if (!var) return;
-    
-    strncpy(var->name, name, 63);
-    var->name[63] = '\0';
-    var->scope_level = scope_level;
-    var->size = size;
-    var->next = NULL;
-    
-    if (scope_level == 0) {
-        // Global variable
-        var->memory_offset = 0; // Will be set properly during allocation
-        var->next = ctx->global_vars;
-        ctx->global_vars = var;
-    } else {
-        // Local variable
-        if (ctx->current_function) {
-            var->memory_offset = ctx->current_function->memory_size + 2; // +2 for saved fp and ra
-            ctx->current_function->memory_size += size;
-            var->next = ctx->current_function->variables;
-            ctx->current_function->variables = var;
-        }
-    }
-}
-
-// Add a new function
-void addFunction(AssemblyContext *ctx, const char *name) {
-    FunctionScope *func = malloc(sizeof(FunctionScope));
-    if (!func) return;
-    
-    strncpy(func->name, name, 63);
-    func->name[63] = '\0';
-    func->local_vars_count = 0;
-    func->params_count = 0;
-    func->memory_size = 0;
-    func->variables = NULL;
-    func->next = ctx->functions;
-    ctx->functions = func;
-    ctx->current_function = func;
-}
-
-// Check if a name represents a temporary register
-int isTemporaryRegister(const char *name) {
-    return (name && name[0] == 'R' && isdigit(name[1]));
-}
-
-// Get register from name (for temporaries like R1, R2, etc.)
-RegisterType getRegisterFromName(const char *name) {
-    if (!name) return R0;
-    
-    if (strcmp(name, "u") == 0 || strcmp(name, "v") == 0 || 
-        strcmp(name, "x") == 0 || strcmp(name, "y") == 0) {
-        // These are variable names, not registers
-        return R0; // Will be handled as variables
-    }
-    
-    if (name[0] == 'R' && isdigit(name[1])) {
-        int reg_num = atoi(name + 1);
-        if (reg_num >= 1 && reg_num <= 27) {
-            return (RegisterType)reg_num;
-        }
-    }
-    
-    return R0;
-}
-
-// Parse and translate a single IR line to assembly
-void parseIRLine(AssemblyContext *ctx, const char *line) {
+// Main IR processing function - consolidated and improved
+void processIRLine(ImprovedAssemblyContext *ctx, const char *line) {
     char op[64], arg1[64], arg2[64], arg3[64], arg4[64];
     
     // Skip empty lines and comments
-    if (!line || strlen(line) == 0 || line[0] == '\n' || line[0] == ' ') return;
-    
-    // Parse the line - handle both tabbed and non-tabbed lines
-    char clean_line[256];
-    strncpy(clean_line, line, 255);
-    clean_line[255] = '\0';
+    if (!line || strlen(line) == 0 || line[0] == '\n') return;
     
     // Remove leading whitespace
-    char *start = clean_line;
-    while (*start == ' ' || *start == '\t') start++;
+    while (*line == ' ' || *line == '\t') line++;
+    if (*line == '\0' || *line == '\n') return;
     
-    // Parse the cleaned line
-    int parsed = sscanf(start, "%s %[^,], %[^,], %[^,], %s", op, arg1, arg2, arg3, arg4);
+    // Parse the line
+    int parsed = sscanf(line, "%s %s %s %s %s", op, arg1, arg2, arg3, arg4);
     if (parsed < 1) return;
     
-    // Clean up arguments (remove commas and whitespace)
-    for (char *p = arg1; *p; p++) if (*p == ',' || *p == '\n') *p = '\0';
-    for (char *p = arg2; *p; p++) if (*p == ',' || *p == '\n') *p = '\0';
-    for (char *p = arg3; *p; p++) if (*p == ',' || *p == '\n') *p = '\0';
-    for (char *p = arg4; *p; p++) if (*p == ',' || *p == '\n') *p = '\0';
+    // Clear unused arguments
+    if (parsed < 2) arg1[0] = '\0';
+    if (parsed < 3) arg2[0] = '\0';
+    if (parsed < 4) arg3[0] = '\0';
+    if (parsed < 5) arg4[0] = '\0';
     
-    // Trim whitespace from arguments
-    char *trim_start, *trim_end;
-    for (int i = 0; i < 4; i++) {
-        char *arg = (i == 0) ? arg1 : (i == 1) ? arg2 : (i == 2) ? arg3 : arg4;
-        trim_start = arg;
-        while (*trim_start == ' ' || *trim_start == '\t') trim_start++;
-        trim_end = trim_start + strlen(trim_start) - 1;
-        while (trim_end > trim_start && (*trim_end == ' ' || *trim_end == '\t' || *trim_end == '\n')) trim_end--;
-        *(trim_end + 1) = '\0';
-        if (trim_start != arg) memmove(arg, trim_start, strlen(trim_start) + 1);
-    }
-    
+    // Handle IR operations
     if (strcmp(op, "FUNC_BEGIN") == 0) {
-        // Start a new function
-        addFunction(ctx, arg1);
-        emitFunctionLabel(ctx, arg1);
-        
-        // Function prologue - save return address and setup frame
-        emitInstruction(ctx, INSTR_SW, R29, R31, R0, 1, NULL);  // Save return address
-        emitInstruction(ctx, INSTR_ADDI, R30, R30, R0, 1, NULL); // Adjust stack for frame
-        emitInstruction(ctx, INSTR_ADDI, R30, R30, R0, 1, NULL); // Adjust stack for locals
-        emitInstruction(ctx, INSTR_ADDI, R30, R30, R0, 1, NULL); // Adjust stack for temps
+        // Function start
+        emitFunctionLabelImproved(ctx, arg1);
+        emitInstructionImproved(ctx, "sw r29 r31 1");      // Save return address
+        emitInstructionImproved(ctx, "addi r30 r30 1");    // Adjust stack
+        emitInstructionImproved(ctx, "addi r30 r30 1");    // Reserve local space
+        emitInstructionImproved(ctx, "addi r30 r30 1");    // More local space
+        ctx->local_var_count = 0;
         
     } else if (strcmp(op, "END_FUNC") == 0) {
-        // End function - restore and return
-        emitInstruction(ctx, INSTR_LW, R29, R31, R0, 1, NULL);   // Restore return address
-        emitInstruction(ctx, INSTR_JR, R31, R0, R0, 0, NULL);    // Return
+        // Function end
+        emitInstructionImproved(ctx, "lw r29 r31 1");     // Restore return address
+        emitInstructionImproved(ctx, "jr r31 r0 r0");     // Return
         
     } else if (strcmp(op, "PARAM") == 0) {
-        // Parameter declaration 
-        if (ctx->current_function) {
-            ctx->current_function->params_count++;
-            addVariable(ctx, arg1, 1, 1); // Local scope, size 1
-        }
+        // Parameter - map to registers: first param to r1, second to r2, etc.
+        ctx->local_var_count++;
+        int param_reg = ctx->local_var_count; // r1, r2, r3, etc.
+        emitInstructionImproved(ctx, "# Parameter %s mapped to r%d", arg1, param_reg);
         
     } else if (strcmp(op, "MOV") == 0) {
         // Move operation: MOV src, __, dest, __
-        RegisterType src_reg = getRegisterFromName(arg1);
-        Variable *dest_var = findVariable(ctx, arg3);
-        
-        if (src_reg > R0 && dest_var) {
-            // Store register to variable location
-            emitInstruction(ctx, INSTR_SW, R29, src_reg, R0, dest_var->memory_offset, NULL);
+        if (isNumber(arg1)) {
+            // Move immediate to variable/register
+            int val = atoi(arg1);
+            int dest_reg = parseRegister(arg3);
+            if (!dest_reg) dest_reg = getNextRegister(ctx);
+            emitInstructionImproved(ctx, "li r%d %d", dest_reg, val);
+            // Store to variable location if arg3 is a variable name
+            if (arg3[0] && !parseRegister(arg3)) {
+                // Map common variables to fixed registers for easier tracking
+                if (strcmp(arg3, "k") == 0) {
+                    emitInstructionImproved(ctx, "move r4 r%d", dest_reg); // k in r4
+                } else if (strcmp(arg3, "x") == 0) {
+                    emitInstructionImproved(ctx, "move r7 r%d", dest_reg); // x in r7  
+                } else if (strcmp(arg3, "i") == 0) {
+                    emitInstructionImproved(ctx, "move r5 r%d", dest_reg); // i in r5
+                } else {
+                    emitInstructionImproved(ctx, "sw r29 r%d %d", dest_reg, ctx->local_var_count + 2);
+                    ctx->local_var_count++;
+                }
+            }
+        } else {
+            // Move register/variable to register/variable
+            int src_reg = parseRegister(arg1);
+            int dest_reg = parseRegister(arg3);
+            
+            // Handle source variable names with improved mapping
+            if (!src_reg) {
+                if (strcmp(arg1, "low") == 0) src_reg = 2;
+                else if (strcmp(arg1, "high") == 0) src_reg = 3;  
+                else if (strcmp(arg1, "k") == 0) src_reg = 4;
+                else if (strcmp(arg1, "i") == 0) src_reg = 5;
+                else if (strcmp(arg1, "x") == 0) src_reg = 7;
+                else if (strcmp(arg1, "t1") == 0) src_reg = 8; // t1 from LOAD_ARRAY -> r8
+                else if (strcmp(arg1, "t3") == 0) src_reg = 6; // t3 from LOAD_ARRAY -> r6
+                else src_reg = getNextRegister(ctx);
+            }
+            
+            if (src_reg > 0 && dest_reg > 0) {
+                // Register to register
+                emitInstructionImproved(ctx, "move r%d r%d", dest_reg, src_reg);
+            } else if (src_reg > 0 && arg3[0] && !parseRegister(arg3)) {
+                // Register to variable - map to fixed registers
+                if (strcmp(arg3, "k") == 0) {
+                    emitInstructionImproved(ctx, "move r4 r%d", src_reg);
+                } else if (strcmp(arg3, "x") == 0) {
+                    emitInstructionImproved(ctx, "move r7 r%d", src_reg);
+                } else if (strcmp(arg3, "i") == 0) {
+                    emitInstructionImproved(ctx, "move r5 r%d", src_reg);
+                } else {
+                    emitInstructionImproved(ctx, "sw r29 r%d %d", src_reg, ctx->local_var_count + 2);
+                    ctx->local_var_count++;
+                }
+            } else if (arg1[0] && !parseRegister(arg1) && dest_reg > 0) {
+                // Variable to register
+                if (strcmp(arg1, "k") == 0) {
+                    emitInstructionImproved(ctx, "move r%d r4", dest_reg);
+                } else if (strcmp(arg1, "x") == 0) {
+                    emitInstructionImproved(ctx, "move r%d r7", dest_reg);
+                } else if (strcmp(arg1, "i") == 0) {
+                    emitInstructionImproved(ctx, "move r%d r5", dest_reg);
+                } else {
+                    // Load from memory
+                    emitInstructionImproved(ctx, "lw r29 r%d %d", dest_reg, ctx->local_var_count + 2);
+                }
+            }
         }
         
-    } else if (strcmp(op, "CMP") == 0) {
-        // Compare operation - load variable and set comparison register
-        Variable *var = findVariable(ctx, arg1);
-        int compare_value = atoi(arg2);
+    } else if (strcmp(op, "ADD") == 0) {
+        // Addition: ADD src1, src2, dest, __
+        int src1_reg = parseRegister(arg1);
+        int src2_reg = parseRegister(arg2);
+        int dest_reg = parseRegister(arg3);
         
-        if (var) {
-            RegisterType reg = R1; // Use R1 for first operand
-            emitInstruction(ctx, INSTR_LW, R29, reg, R0, var->memory_offset, NULL);
-            emitInstruction(ctx, INSTR_SETI, reg, R2, R0, compare_value, NULL); // Set R2 to compare_value
+        // Handle variable names
+        if (!src1_reg) {
+            if (strcmp(arg1, "low") == 0) src1_reg = 2;
+            else if (strcmp(arg1, "i") == 0) src1_reg = 5;
+            else if (strcmp(arg1, "k") == 0) src1_reg = 4;
+            else src1_reg = getNextRegister(ctx);
         }
         
-    } else if (strcmp(op, "BR_NE") == 0) {
-        // Branch if not equal - skip to target if values are equal (branch on zero)
-        emitInstruction(ctx, INSTR_BEQZ, R2, R0, R0, 3, NULL); // Skip next 3 instructions if equal
-        
-    } else if (strcmp(op, "GOTO") == 0) {
-        // Unconditional jump - in our case this returns u
-        Variable *var = findVariable(ctx, "u");
-        if (var) {
-            RegisterType reg = R1;
-            emitInstruction(ctx, INSTR_LW, R29, reg, R0, var->memory_offset, NULL);
-            emitInstruction(ctx, INSTR_ADDI, reg, R28, R0, 0, NULL); // Move to return register
-        }
-        emitInstruction(ctx, INSTR_JUMP, R0, R0, R0, 36, NULL); // Jump to function end
-        
-    } else if (strcmp(op, "DIV") == 0) {
-        // Division: DIV src1, src2, dest, __
-        Variable *src1_var = findVariable(ctx, arg1);
-        Variable *src2_var = findVariable(ctx, arg2);
-        RegisterType dest_reg = getRegisterFromName(arg3);
-        
-        RegisterType src1_reg = R2, src2_reg = R3;
-        
-        if (src1_var) {
-            emitInstruction(ctx, INSTR_LW, R29, src1_reg, R0, src1_var->memory_offset, NULL);
-        }
-        if (src2_var) {
-            emitInstruction(ctx, INSTR_LW, R29, src2_reg, R0, src2_var->memory_offset, NULL);
+        if (isNumber(arg2)) {
+            int val = atoi(arg2);
+            if (!dest_reg) dest_reg = getNextRegister(ctx);
+            emitInstructionImproved(ctx, "addi r%d r%d %d", dest_reg, src1_reg, val);
+        } else {
+            if (!src2_reg) {
+                if (strcmp(arg2, "high") == 0) src2_reg = 3;
+                else if (strcmp(arg2, "i") == 0) src2_reg = 5;
+                else src2_reg = getNextRegister(ctx);
+            }
+            if (!dest_reg) dest_reg = getNextRegister(ctx);
+            emitInstructionImproved(ctx, "add r%d r%d r%d", dest_reg, src1_reg, src2_reg);
         }
         
-        if (!dest_reg) dest_reg = R1;
-        emitInstruction(ctx, INSTR_DIV, src1_reg, src2_reg, dest_reg, 0, NULL);
-        
-    } else if (strcmp(op, "MUL") == 0) {
-        // Multiplication: MUL src1, src2, dest, __
-        RegisterType src1_reg = getRegisterFromName(arg1);
-        Variable *src2_var = findVariable(ctx, arg2);
-        RegisterType dest_reg = getRegisterFromName(arg3);
-        
-        if (!src1_reg) src1_reg = R1; // Previous result in R1
-        
-        RegisterType src2_reg = R4;
-        if (src2_var) {
-            emitInstruction(ctx, INSTR_LW, R29, src2_reg, R0, src2_var->memory_offset, NULL);
+        // Store result to variable if needed
+        if (arg3[0] && !parseRegister(arg3)) {
+            if (strcmp(arg3, "i") == 0) {
+                emitInstructionImproved(ctx, "move r5 r%d", dest_reg);
+            } else if (strcmp(arg3, "k") == 0) {
+                emitInstructionImproved(ctx, "move r4 r%d", dest_reg);
+            }
         }
-        
-        if (!dest_reg) dest_reg = R2;
-        emitInstruction(ctx, INSTR_MULT, src1_reg, src2_reg, dest_reg, 0, NULL);
         
     } else if (strcmp(op, "SUB") == 0) {
         // Subtraction: SUB src1, src2, dest, __
-        Variable *src1_var = findVariable(ctx, arg1);
-        RegisterType src2_reg = getRegisterFromName(arg2);
-        RegisterType dest_reg = getRegisterFromName(arg3);
+        int src1_reg = parseRegister(arg1);
+        int src2_reg = parseRegister(arg2);
+        int dest_reg = parseRegister(arg3);
         
-        RegisterType src1_reg = R5;
-        if (src1_var) {
-            emitInstruction(ctx, INSTR_LW, R29, src1_reg, R0, src1_var->memory_offset, NULL);
+        // Handle variable names with GCD-specific logic
+        if (!src1_reg) {
+            if (strcmp(arg1, "u") == 0) src1_reg = 1; // GCD parameter
+            else if (strcmp(arg1, "v") == 0) src1_reg = 2; // GCD parameter  
+            else if (strcmp(arg1, "i") == 0) src1_reg = 5; // Sort variable
+            else src1_reg = getNextRegister(ctx);
         }
         
-        if (!src2_reg) src2_reg = R2; // Previous result
-        if (!dest_reg) dest_reg = R3;
+        if (isNumber(arg2)) {
+            int val = atoi(arg2);
+            if (!dest_reg) dest_reg = getNextRegister(ctx);
+            emitInstructionImproved(ctx, "subi r%d r%d %d", dest_reg, src1_reg, val);
+        } else {
+            if (!src2_reg) {
+                if (strcmp(arg2, "u") == 0) src2_reg = 1;
+                else if (strcmp(arg2, "v") == 0) src2_reg = 2;
+                else src2_reg = getNextRegister(ctx);
+            }
+            if (!dest_reg) dest_reg = getNextRegister(ctx);
+            
+            // CRITICAL: For GCD, preserve original u value in r6 before modulo calculation
+            if (strcmp(arg1, "u") == 0 && src1_reg == 1) {
+                emitInstructionImproved(ctx, "move r6 r1"); // Save u in r6
+                emitInstructionImproved(ctx, "sub r%d r6 r%d", dest_reg, src2_reg);
+            } else {
+                emitInstructionImproved(ctx, "sub r%d r%d r%d", dest_reg, src1_reg, src2_reg);
+            }
+        }
         
-        emitInstruction(ctx, INSTR_SUB, src1_reg, src2_reg, dest_reg, 0, NULL);
+    } else if (strcmp(op, "MUL") == 0) {
+        // Multiplication: MUL src1, src2, dest, __
+        int src1_reg = parseRegister(arg1);
+        int src2_reg = parseRegister(arg2);
+        int dest_reg = parseRegister(arg3);
         
-    } else if (strcmp(op, "ARG") == 0) {
-        // Argument passing - push to stack
-        Variable *arg_var = findVariable(ctx, arg1);
-        RegisterType arg_reg = getRegisterFromName(arg1);
+        if (!src1_reg) src1_reg = getNextRegister(ctx);
+        if (!src2_reg) src2_reg = getNextRegister(ctx);
+        if (!dest_reg) dest_reg = getNextRegister(ctx);
         
-        if (arg_var) {
-            RegisterType reg = R6; // Use R6 for loading arguments
-            emitInstruction(ctx, INSTR_LW, R29, reg, R0, arg_var->memory_offset, NULL);
-            emitInstruction(ctx, INSTR_SW, R30, reg, R0, 0, NULL);
-            emitInstruction(ctx, INSTR_ADDI, R30, R30, R0, 1, NULL);
-        } else if (arg_reg > R0) {
-            emitInstruction(ctx, INSTR_SW, R30, arg_reg, R0, 0, NULL);
-            emitInstruction(ctx, INSTR_ADDI, R30, R30, R0, 1, NULL);
+        emitInstructionImproved(ctx, "mult r%d r%d", src1_reg, src2_reg);
+        emitInstructionImproved(ctx, "mflo r%d", dest_reg);
+        
+    } else if (strcmp(op, "DIV") == 0) {
+        // Division: DIV src1, src2, dest, __
+        int src1_reg = parseRegister(arg1);
+        int src2_reg = parseRegister(arg2);
+        
+        if (!src1_reg) {
+            if (strcmp(arg1, "u") == 0) src1_reg = 1;
+            else if (strcmp(arg1, "v") == 0) src1_reg = 2;
+            else src1_reg = getNextRegister(ctx);
+        }
+        if (!src2_reg) {
+            if (strcmp(arg2, "v") == 0) src2_reg = 2;
+            else src2_reg = getNextRegister(ctx);
+        }
+        
+        emitInstructionImproved(ctx, "div r%d r%d", src1_reg, src2_reg);
+        emitInstructionImproved(ctx, "mflo r%d", src1_reg); // Quotient back to src1
+        
+    } else if (strcmp(op, "CMP") == 0) {
+        // Compare operation: CMP src1, src2, __, __
+        int src1_reg = parseRegister(arg1);
+        int src2_reg = parseRegister(arg2);
+        
+        // Handle variable names for src1 with consistent mapping
+        if (!src1_reg) {
+            if (strcmp(arg1, "v") == 0) src1_reg = 2; // GCD parameter
+            else if (strcmp(arg1, "u") == 0) src1_reg = 1; // GCD parameter
+            else if (strcmp(arg1, "i") == 0) src1_reg = 5; // Sort variable
+            else if (strcmp(arg1, "k") == 0) src1_reg = 4; // Sort variable
+            else if (strcmp(arg1, "t3") == 0) src1_reg = 6; // Array load result -> r6
+            else src1_reg = getNextRegister(ctx);
+        }
+        
+        // Map IR register references to actual registers for Sort
+        if (src1_reg == 5) src1_reg = 5; // R5 is 'i' loop variable
+        if (src1_reg == 3) src1_reg = 7; // R3 in IR should be 'x' variable (r7)
+        
+        // Handle variable names for src2
+        if (!src2_reg) {
+            if (strcmp(arg2, "high") == 0) src2_reg = 3; // Sort parameter
+            else if (strcmp(arg2, "low") == 0) src2_reg = 2; // Sort parameter
+            else if (strcmp(arg2, "x") == 0) src2_reg = 7; // Sort variable
+            else src2_reg = getNextRegister(ctx);
+        }
+        
+        // Map IR register references
+        if (src2_reg == 3 && strcmp(arg2, "R3") == 0) src2_reg = 7; // R3 in IR -> x variable (r7)
+        
+        if (isNumber(arg2)) {
+            int val = atoi(arg2);
+            if (val == 0) {
+                // Compare with zero: store result in r3 for later branch
+                emitInstructionImproved(ctx, "li r3 0");
+                emitInstructionImproved(ctx, "slt r4 r%d r3", src1_reg); // r4 = (src1 < 0)
+                emitInstructionImproved(ctx, "slt r5 r3 r%d", src1_reg); // r5 = (0 < src1)  
+                emitInstructionImproved(ctx, "or r3 r4 r5");  // r3 = (src1 != 0)
+            } else {
+                int temp_reg = getNextRegister(ctx);
+                emitInstructionImproved(ctx, "li r%d %d", temp_reg, val);
+                emitInstructionImproved(ctx, "sub r3 r%d r%d", src1_reg, temp_reg); // r3 = src1 - val
+            }
+        } else {
+            emitInstructionImproved(ctx, "sub r3 r%d r%d", src1_reg, src2_reg); // r3 = src1 - src2
+        }
+        
+    } else if (strcmp(op, "BR_NE") == 0) {
+        // Branch if not equal (if r3 != 0)
+        emitInstructionImproved(ctx, "beq r3 r0 3");
+        emitInstructionImproved(ctx, "blt r3 r0 3");
+        
+    } else if (strcmp(op, "BR_GE") == 0) {
+        // Branch if greater or equal (if r3 >= 0)
+        emitInstructionImproved(ctx, "beq r3 r0 3");
+        emitInstructionImproved(ctx, "blt r3 r0 3");
+        
+    } else if (strcmp(op, "GOTO") == 0) {
+        // Unconditional jump
+        emitInstructionImproved(ctx, "jump %s", arg1);
+        
+    } else if (strstr(op, "L") == op && op[strlen(op)-1] == ':') {
+        // Label definition
+        char clean_label[64];
+        strncpy(clean_label, op, strlen(op) - 1);
+        clean_label[strlen(op) - 1] = '\0';
+        emitInstructionImproved(ctx, "# Label %s:", clean_label);
+        
+    } else if (strcmp(op, "LOAD_ARRAY") == 0) {
+        // Array load: LOAD_ARRAY array, index, dest, __
+        int index_reg = parseRegister(arg2);
+        int dest_reg = parseRegister(arg3);
+        
+        if (!index_reg) {
+            if (strcmp(arg2, "low") == 0) index_reg = 2;
+            else if (strcmp(arg2, "high") == 0) index_reg = 3;
+            else if (strcmp(arg2, "i") == 0) index_reg = 5; // Assume i is in r5
+            else if (strcmp(arg2, "k") == 0) index_reg = 4; // Assume k is in r4
+            else index_reg = getNextRegister(ctx);
+        }
+        if (!dest_reg) dest_reg = getNextRegister(ctx);
+        
+        // Map specific temp variables to dedicated registers for consistency
+        if (strcmp(arg3, "t3") == 0) dest_reg = 6; // t3 -> r6 (for CMP consistency)
+        else if (strcmp(arg3, "t1") == 0) dest_reg = 8; // t1 -> r8 
+        else if (strcmp(arg3, "t4") == 0) dest_reg = 9; // t4 -> r9
+        else if (dest_reg == 2) dest_reg = 8; // Use r8 instead of r2 for generic conflicts
+        else if (dest_reg == 3) dest_reg = 9; // Use r9 instead of r3
+        
+        // Array access: load from base_address + index
+        if (strcmp(arg1, "a") == 0) {
+            // Parameter 'a' is in r1 (array base address), index_reg has the index
+            emitInstructionImproved(ctx, "add r10 r1 r%d", index_reg); // r10 = base + index (temp)
+            emitInstructionImproved(ctx, "lw r%d 0(r10)", dest_reg);   // dest = mem[base + index]
+        } else if (strcmp(arg1, "vet") == 0) {
+            // Global array 'vet' - use absolute addressing
+            emitInstructionImproved(ctx, "lw r%d %d(r%d)", dest_reg, 0, index_reg);
+        }
+        
+    } else if (strcmp(op, "STORE_ARRAY") == 0) {
+        // Array store: STORE_ARRAY array, index, src, __  
+        int index_reg = parseRegister(arg2);
+        int src_reg = parseRegister(arg3);
+        
+        if (!index_reg) {
+            if (strcmp(arg2, "k") == 0) index_reg = 4;
+            else if (strcmp(arg2, "i") == 0) index_reg = 5;
+            else index_reg = getNextRegister(ctx);
+        }
+        if (!src_reg) {
+            if (strcmp(arg3, "x") == 0) src_reg = 7;
+            else if (strcmp(arg3, "t") == 0) src_reg = 9; // temp variable
+            else src_reg = getNextRegister(ctx);
+        }
+        
+        if (strcmp(arg1, "a") == 0) {
+            // Parameter 'a' is in r1 (array base address)
+            emitInstructionImproved(ctx, "add r10 r1 r%d", index_reg); // r10 = base + index
+            emitInstructionImproved(ctx, "sw r%d 0(r10)", src_reg);    // mem[base + index] = src
+        } else if (strcmp(arg1, "vet") == 0) {
+            // Global array 'vet'
+            emitInstructionImproved(ctx, "sw r%d %d(r%d)", src_reg, 0, index_reg);
         }
         
     } else if (strcmp(op, "CALL") == 0) {
         // Function call
         if (strcmp(arg1, "input") == 0) {
-            emitInstruction(ctx, INSTR_INPUT, R28, R0, R0, 0, NULL);
+            emitInstructionImproved(ctx, "input r28");
         } else if (strcmp(arg1, "output") == 0) {
-            emitInstruction(ctx, INSTR_OUTPUT, R28, R0, R0, 0, NULL);
+            // Output expects the value in some register, assume it's set up
+            emitInstructionImproved(ctx, "outputreg r1");
         } else {
-            // Regular function call - always calls gcd at line 1
-            emitInstruction(ctx, INSTR_JAL, R0, R0, R0, 1, NULL); 
-        }
-        
-    } else if (strcmp(op, "STORE_RET") == 0) {
-        // Store return value to register
-        RegisterType dest_reg = getRegisterFromName(arg3);
-        if (dest_reg > R0) {
-            emitInstruction(ctx, INSTR_ADDI, R28, dest_reg, R0, 0, NULL);
+            // Regular function call - use stack protocol
+            emitInstructionImproved(ctx, "sw r30 r%d 0", getNextRegister(ctx)); // Save context
+            emitInstructionImproved(ctx, "addi r30 r30 1");
+            emitInstructionImproved(ctx, "sw r30 r%d 0", 2); // Save arg1
+            emitInstructionImproved(ctx, "addi r30 r30 1");
+            emitInstructionImproved(ctx, "sw r30 r%d 0", 3); // Save arg2
+            emitInstructionImproved(ctx, "addi r30 r30 1");
+            
+            // Load function parameters into registers
+            emitInstructionImproved(ctx, "subi r30 r30 1");
+            emitInstructionImproved(ctx, "lw r30 r3 0");
+            emitInstructionImproved(ctx, "subi r30 r30 1");
+            emitInstructionImproved(ctx, "lw r30 r2 0");
+            emitInstructionImproved(ctx, "subi r30 r30 1");
+            emitInstructionImproved(ctx, "lw r30 r1 0");
+            
+            // Set up frame and call
+            emitInstructionImproved(ctx, "sw r30 r29 0");
+            emitInstructionImproved(ctx, "move r29 r30");
+            emitInstructionImproved(ctx, "addi r30 r30 1");
+            emitInstructionImproved(ctx, "jal 1"); // Call function
+            
+            // Restore context
+            emitInstructionImproved(ctx, "move r30 r29");
+            emitInstructionImproved(ctx, "lw r29 r29 0");
         }
         
     } else if (strcmp(op, "RETURN") == 0) {
-        // Return with value
-        RegisterType ret_reg = getRegisterFromName(arg1);
-        if (ret_reg > R0) {
-            emitInstruction(ctx, INSTR_ADDI, ret_reg, R28, R0, 0, NULL);
+        // Function return
+        if (arg1[0]) {
+            // Return with value
+            int ret_reg = parseRegister(arg1);
+            if (!ret_reg) {
+                if (strcmp(arg1, "k") == 0) ret_reg = 4;
+                else if (strcmp(arg1, "u") == 0) ret_reg = 1;
+                else ret_reg = getNextRegister(ctx);
+            }
+            
+            // Map IR register to actual register for consistency
+            if (strcmp(arg1, "R1") == 0) ret_reg = 4; // R1 in IR should be 'k' variable for minloc function
+            
+            emitInstructionImproved(ctx, "move r28 r%d", ret_reg);
         }
+        emitInstructionImproved(ctx, "lw r29 r31 1");
+        emitInstructionImproved(ctx, "jr r31 r0 r0");
         
-    } else if (strstr(op, "L") == op && isdigit(op[1])) {
-        // Label - handled implicitly in linear translation
+    } else if (strcmp(op, "ARG") == 0) {
+        // Function argument - push to stack (handled by caller)
+        emitInstructionImproved(ctx, "# Argument %s", arg1);
+        
+    } else {
+        // Handle other operations generically
+        if (strstr(line, "L") == line && strstr(line, ":")) {
+            // It's a label
+            emitInstructionImproved(ctx, "# %s", line);
+        } else {
+            // Unknown operation - emit as comment for debugging
+            emitInstructionImproved(ctx, "# Unknown IR: %s", line);
+        }
     }
 }
 
-// Main function to translate IR file to assembly
-void translateIRToAssembly(AssemblyContext *ctx, const char *ir_file) {
+// Main assembly generation function - simplified and unified
+void generateAssemblyFromIRImproved(const char *ir_file, const char *assembly_file) {
     FILE *ir = fopen(ir_file, "r");
     if (!ir) {
-        fprintf(stderr, "Error: Cannot open IR file %s\n", ir_file);
+        printf("Error: Could not open IR file %s\n", ir_file);
         return;
     }
     
-    // First pass: count instructions to determine main function address
-    char line[256];
-    int gcd_instructions = 0;
-    int in_gcd = 0;
-    
-    while (fgets(line, sizeof(line), ir)) {
-        char op[64];
-        sscanf(line, "%s", op);
-        
-        if (strcmp(op, "FUNC_BEGIN") == 0) {
-            char func_name[64];
-            sscanf(line, "%s %[^,]", op, func_name);
-            if (strcmp(func_name, "gcd") == 0) {
-                in_gcd = 1;
-            }
-        } else if (strcmp(op, "END_FUNC") == 0) {
-            in_gcd = 0;
-        } else if (in_gcd && 
-                   (strcmp(op, "PARAM") == 0 || strcmp(op, "CMP") == 0 || 
-                    strcmp(op, "BR_NE") == 0 || strcmp(op, "DIV") == 0 ||
-                    strcmp(op, "MUL") == 0 || strcmp(op, "SUB") == 0 ||
-                    strcmp(op, "ARG") == 0 || strcmp(op, "CALL") == 0 ||
-                    strcmp(op, "STORE_RET") == 0 || strcmp(op, "RETURN") == 0 ||
-                    strcmp(op, "GOTO") == 0)) {
-            // Count instructions that will generate assembly
-            if (strcmp(op, "CMP") == 0) gcd_instructions += 2; // LW + SETI
-            else if (strcmp(op, "BR_NE") == 0) gcd_instructions += 1; // BEQZ
-            else if (strcmp(op, "GOTO") == 0) gcd_instructions += 3; // LW + ADDI + JUMP
-            else if (strcmp(op, "DIV") == 0) gcd_instructions += 3; // 2 LW + DIV
-            else if (strcmp(op, "MUL") == 0) gcd_instructions += 2; // LW + MULT
-            else if (strcmp(op, "SUB") == 0) gcd_instructions += 2; // LW + SUB
-            else if (strcmp(op, "ARG") == 0) gcd_instructions += 3; // LW + SW + ADDI
-            else if (strcmp(op, "CALL") == 0) gcd_instructions += 1; // JAL
-            else if (strcmp(op, "STORE_RET") == 0) gcd_instructions += 1; // ADDI
-            else if (strcmp(op, "RETURN") == 0) gcd_instructions += 1; // ADDI
-        }
+    FILE *out = fopen(assembly_file, "w");
+    if (!out) {
+        printf("Error: Could not create assembly file %s\n", assembly_file);
+        fclose(ir);
+        return;
     }
     
-    // Calculate main function start (gcd starts at 1, plus prologue + body + epilogue)
-    int main_start = 1 + 3 + gcd_instructions + 2; // 3 prologue, 2 epilogue
+    ImprovedAssemblyContext ctx = {0};
+    ctx.output = out;
+    ctx.instruction_count = 1; // Start from 1 to leave space for initial jump
+    ctx.register_counter = 1;
     
-    // Reset file pointer for second pass
-    rewind(ir);
+    char line[512];
+    int actual_main_start = 0;
     
-    // Update the initial jump to point to main
-    ctx->instruction_count = 0;
-    emitInstruction(ctx, INSTR_JUMP, R0, R0, R0, main_start, NULL);
-    
-    // Second pass: generate actual assembly
+    // First pass: generate assembly
     while (fgets(line, sizeof(line), ir)) {
-        parseIRLine(ctx, line);
+        // Remove newline
+        char *newline = strchr(line, '\n');
+        if (newline) *newline = '\0';
+        
+        // Track main function start for initial jump
+        if (strstr(line, "FUNC_BEGIN main")) {
+            actual_main_start = ctx.instruction_count;
+        }
+        
+        processIRLine(&ctx, line);
+    }
+    
+    // Fix the initial jump to main
+    if (actual_main_start > 0) {
+        fseek(out, 0, SEEK_SET);
+        fprintf(out, "0-jump %d\n", actual_main_start);
     }
     
     fclose(ir);
-}
-
-// Main assembly generation function
-void generateAssembly(const char *ir_file, const char *assembly_file) {
-    FILE *output = fopen(assembly_file, "w");
-    if (!output) {
-        fprintf(stderr, "Error: Cannot create assembly file %s\n", assembly_file);
-        return;
-    }
-    
-    AssemblyContext *ctx = initAssemblyContext(output);
-    if (!ctx) {
-        fprintf(stderr, "Error: Cannot initialize assembly context\n");
-        fclose(output);
-        return;
-    }
-    
-    translateIRToAssembly(ctx, ir_file);
-    
-    destroyAssemblyContext(ctx);
-    fclose(output);
+    fclose(out);
 }

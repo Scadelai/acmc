@@ -15,11 +15,11 @@ typedef struct globalVarRec {
 } *GlobalVarList;
 
 // Code generation functions
-void codeGen(TreeNode *syntaxTree, char *irOutputFile);
+void codeGen(TreeNode *syntaxTree, char *irOutputFile, const char *sourceFilename);
 void generateIntermediateCode(TreeNode *syntaxTree);
 
 // Assembly generation function
-void generateAssemblyFromIR(const char *irOutputFile);
+void generateAssemblyFromIR(const char *irOutputFile, const char *sourceFilename);
 
 // Utility functions for code generation
 char *newTemp(void);

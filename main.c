@@ -74,9 +74,23 @@ int main(int argc, char *argv[]) {
   // Se não houver erros, constrói a tabela de símbolos e gera o código intermediário
   if (!Error) {
     build_symbol_table(syntax_tree);
+    
+    // Generate IR filename from source filename
+    char irFilename[256];
+    strcpy(irFilename, filename);
+    
+    // Replace .c- extension with .ir
+    char *dot = strrchr(irFilename, '.');
+    if (dot != NULL && strcmp(dot, ".c-") == 0) {
+        strcpy(dot, ".ir");
+    } else {
+        // If no .c- extension found, just append .ir
+        strcat(irFilename, ".ir");
+    }
+    
     // Chama a função para gerar o código intermediário; 
-    // esta função deve gravar a saída em "output.ir"
-    codeGen(syntax_tree, "output.ir");
+    // esta função deve gravar a saída em arquivo .ir baseado no nome do source
+    codeGen(syntax_tree, irFilename, filename);
   }
 
   fclose(source);

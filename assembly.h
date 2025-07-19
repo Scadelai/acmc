@@ -11,6 +11,7 @@
 #define MAX_INSTRUCTIONS 1000
 #define MAX_FUNCTIONS 50
 #define MAX_VARIABLES 200
+#define MAX_LABELS 100
 #ifndef MAX_LABEL_LEN
 #define MAX_LABEL_LEN 50
 #endif
@@ -97,6 +98,13 @@ typedef struct {
     int line_number;
 } AssemblyInstruction;
 
+// Label tracking structure
+typedef struct {
+    char name[MAX_LABEL_LEN];
+    int address;
+    int defined;
+} LabelInfo;
+
 // Variable information for assembly generation
 typedef struct Variable {
     char name[64];
@@ -126,10 +134,15 @@ typedef struct {
     int current_label_num;
     int register_usage[MAX_REGISTERS];  // 0 = free, 1 = used
     FunctionScope *current_function;
+    LabelInfo labels[MAX_LABELS];       // Label tracking
+    int label_count;
+    int stack_level;                    // Current stack nesting level
+    int temp_counter;                   // Temporary variable counter
+    RegisterType last_cmp_reg1;         // Last comparison register 1
+    RegisterType last_cmp_reg2;         // Last comparison register 2
 } AssemblyContext;
 
 // Main assembly generation functions
-void generateAssembly(const char *ir_file, const char *assembly_file);
 void generateAssemblyFromIRImproved(const char *ir_file, const char *assembly_file);
 AssemblyContext* initAssemblyContext(FILE *output);
 void destroyAssemblyContext(AssemblyContext *ctx);
@@ -163,5 +176,8 @@ const char* getRegisterName(RegisterType reg);
 const char* getInstructionName(InstructionType instr);
 int isTemporaryRegister(const char *name);
 RegisterType getRegisterFromName(const char *name);
+
+// Main assembly generation function (improved version)
+void generateAssemblyFromIRImproved(const char *ir_file, const char *assembly_file);
 
 #endif

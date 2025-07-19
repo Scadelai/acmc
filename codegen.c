@@ -991,7 +991,7 @@ static void generateFunctions(TreeNode *tree) {
 // Processa a árvore sintática em dois passos:
 // 1. Primeiro passo: coleta e emite declarações de variáveis globais
 // 2. Segundo passo: gera código para todas as funções
-void codeGen(TreeNode *syntaxTree, char * irOutputFile) {
+void codeGen(TreeNode *syntaxTree, char * irOutputFile, const char *sourceFilename) {
     outputFile = fopen(irOutputFile, "w");
     if (outputFile == NULL) {
         fprintf(stderr, "Erro: Não foi possível abrir %s para escrita\n", irOutputFile);
@@ -1131,14 +1131,14 @@ void codeGen(TreeNode *syntaxTree, char * irOutputFile) {
     
     // Validação básica do código gerado
     printf("Validando código IR gerado...\n");
-    int validation_errors = validate_ir_file("output.ir");
+    int validation_errors = validate_ir_file(irOutputFile);
     if (validation_errors == 0) {
         printf("✓ Código IR válido gerado com sucesso!\n");
         
         // Generate assembly code from IR
         printf("Gerando código Assembly...\n");
-        generateAssemblyFromIR(irOutputFile);
-        printf("✓ Código Assembly gerado em assembly.txt\n");
+        generateAssemblyFromIR(irOutputFile, sourceFilename);
+        printf("✓ Código Assembly gerado\n");
     } else {
         printf("⚠ Encontrados %d problemas durante a validação\n", validation_errors);
     }
@@ -1156,7 +1156,7 @@ void codeGen(TreeNode *syntaxTree, char * irOutputFile) {
 
 // Função codegen para ser chamada de main.c
 void generateIntermediateCode(TreeNode *syntaxTree) {
-    codeGen(syntaxTree, "output.ir");
+    codeGen(syntaxTree, "output.ir", "unknown.c-");
 }
 
 // ============================================================================
@@ -1488,6 +1488,20 @@ char *legacy_newLabel(void) {
 }
 
 // Assembly generation wrapper function
-void generateAssemblyFromIR(const char *irOutputFile) {
-    generateAssemblyFromIRImproved(irOutputFile, "assembly.txt");
+void generateAssemblyFromIR(const char *irOutputFile, const char *sourceFilename) {
+    // Generate assembly filename from source filename
+    char assemblyFilename[256];
+    strcpy(assemblyFilename, sourceFilename);
+    
+    // Replace .c- extension with .asm
+    char *dot = strrchr(assemblyFilename, '.');
+    if (dot != NULL && strcmp(dot, ".c-") == 0) {
+        strcpy(dot, ".asm");
+    } else {
+        // If no .c- extension found, just append .asm
+        strcat(assemblyFilename, ".asm");
+    }
+    
+    generateAssemblyFromIRImproved(irOutputFile, assemblyFilename);
+    printf("✓ Código Assembly gerado em %s\n", assemblyFilename);
 }
