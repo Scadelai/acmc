@@ -669,15 +669,9 @@ char *generate_expression_code(TreeNode *tree) {
                         result_var = allocate_register_for_expression(tree, TYPE_INT);
                         generate_enhanced_quad("LOAD_ARRAY", tree->attr.name, index_expr, result_var, TYPE_INT);
                     } else { // Variável simples
-                        // Check if variable exists in our enhanced tracking
-                        VariableInfo* var_info = get_variable_info(tree->attr.name);
-                        if (var_info && var_info->reg_hint >= 0) {
-                            // Variable has a register hint, use it
-                            result_var = (char*)malloc(8);
-                            snprintf(result_var, 8, "R%d", var_info->reg_hint);
-                        } else {
-                            result_var = copyString(tree->attr.name);
-                        }
+                        // Always return the variable name directly for proper tracking
+                        // The assembler will handle register allocation
+                        result_var = copyString(tree->attr.name);
                     }
                     return result_var;
 
@@ -789,6 +783,13 @@ static void generate_statement_code(TreeNode *tree) {
                         char *cond_var = generate_expression_code(tree->child[0]);
                         emit_quad("CMP", cond_var, "0", NULL); // Assumindo 0 é falso
                         emit_quad("BR_EQ", label1, NULL, NULL); // Salta se cond_var é falso (0)
+                    }
+
+                    // Generate the THEN block (tree->child[1])
+                    TreeNode *then_stmt = tree->child[1];
+                    while (then_stmt != NULL) {
+                        generate_code_single(then_stmt);
+                        then_stmt = then_stmt->sibling;
                     }
 
                     if (tree->child[2] != NULL) { // Parte else existe

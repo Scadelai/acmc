@@ -70,3 +70,9 @@ CompiladorWladimir/
 
 # Compiler executable
 acmc
+test_generic.c-
+.gitignore
+test_generic.asm
+test_generic.ir
+assembly cheap_backup.c
+assembly copy_better.c

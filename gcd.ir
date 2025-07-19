@@ -3,6 +3,7 @@ FUNC_BEGIN gcd, 2, __, __
   PARAM v, __, __, __
   CMP v, 0, __, __
   BR_NE L0, __, __, __
+  RETURN u, __, __, __
   GOTO L1, __, __, __
   L0:
   DIV u, v, R1, __
@@ -23,8 +24,8 @@ FUNC_BEGIN main, 0, __, __
   CALL input, 0, __, __
   STORE_RET __, __, R9, __
   MOV R9, __, y, __
-  ARG R8, __, __, __
-  ARG R10, __, __, __
+  ARG x, __, __, __
+  ARG y, __, __, __
   CALL gcd, 2, __, __
   STORE_RET __, __, R11, __
   ARG R11, __, __, __

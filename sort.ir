@@ -10,41 +10,44 @@ FUNC_BEGIN minloc, 3, __, __
   ADD low, 1, R4, __
   MOV R4, __, i, __
   L0:
-  CMP R5, high, __, __
+  CMP i, high, __, __
   BR_GE L1, __, __, __
-  LOAD_ARRAY a, R5, R6, __
-  CMP R6, R3, __, __
+  LOAD_ARRAY a, i, R6, __
+  CMP R6, x, __, __
   BR_GE L2, __, __, __
+  LOAD_ARRAY a, i, R7, __
+  MOV R7, __, x, __
+  MOV i, __, k, __
   L2:
-  ADD R5, 1, R7, __
-  MOV R7, __, i, __
+  ADD i, 1, R10, __
+  MOV R10, __, i, __
   GOTO L0, __, __, __
   L1:
-  RETURN R1, __, __, __
+  RETURN k, __, __, __
 END_FUNC minloc, __, __, __
 
 FUNC_BEGIN sort, 3, __, __
   PARAM a, __, __, __
   PARAM low, __, __, __
   PARAM high, __, __, __
-  MOV R10, __, i, __
+  MOV low, __, i, __
   L0:
-  SUB R11, 1, R13, __
-  CMP R12, R13, __, __
+  SUB high, 1, R16, __
+  CMP i, R16, __, __
   BR_GE L1, __, __, __
-  ARG R9, __, __, __
-  ARG R12, __, __, __
-  ARG R11, __, __, __
+  ARG a, __, __, __
+  ARG i, __, __, __
+  ARG high, __, __, __
   CALL minloc, 3, __, __
-  STORE_RET __, __, R14, __
-  MOV R14, __, k, __
-  LOAD_ARRAY a, R15, R16, __
-  MOV R16, __, t, __
-  LOAD_ARRAY a, R12, R18, __
-  STORE_ARRAY a, R15, R18, __
-  STORE_ARRAY a, R12, R17, __
-  ADD R12, 1, R19, __
-  MOV R19, __, i, __
+  STORE_RET __, __, R17, __
+  MOV R17, __, k, __
+  LOAD_ARRAY a, k, R19, __
+  MOV R19, __, t, __
+  LOAD_ARRAY a, i, R21, __
+  STORE_ARRAY a, k, R21, __
+  STORE_ARRAY a, i, t, __
+  ADD i, 1, R22, __
+  MOV R22, __, i, __
   GOTO L0, __, __, __
   L1:
 END_FUNC sort, __, __, __
@@ -52,13 +55,13 @@ END_FUNC sort, __, __, __
 FUNC_BEGIN main, 0, __, __
   MOV 0, __, i, __
   L0:
-  CMP R24, 10, __, __
+  CMP i, 10, __, __
   BR_GE L1, __, __, __
   CALL input, 0, __, __
-  STORE_RET __, __, R25, __
-  STORE_ARRAY vet, R24, R25, __
-  ADD R24, 1, R26, __
-  MOV R26, __, i, __
+  STORE_RET __, __, R28, __
+  STORE_ARRAY vet, i, R28, __
+  ADD i, 1, R29, __
+  MOV R29, __, i, __
   GOTO L0, __, __, __
   L1:
   ARG vet, __, __, __
@@ -67,13 +70,13 @@ FUNC_BEGIN main, 0, __, __
   CALL sort, 3, __, __
   MOV 0, __, i, __
   L2:
-  CMP R28, 10, __, __
+  CMP i, 10, __, __
   BR_GE L3, __, __, __
-  LOAD_ARRAY vet, R28, R29, __
-  ARG R29, __, __, __
+  LOAD_ARRAY vet, i, R33, __
+  ARG R33, __, __, __
   CALL output, 1, __, __
-  ADD R28, 1, R30, __
-  MOV R30, __, i, __
+  ADD i, 1, R34, __
+  MOV R34, __, i, __
   GOTO L2, __, __, __
   L3:
 END_FUNC main, __, __, __

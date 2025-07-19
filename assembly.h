@@ -124,60 +124,36 @@ typedef struct FunctionScope {
     struct FunctionScope *next;
 } FunctionScope;
 
-// Assembly generation context
+// Generic register mapping for any C- program
 typedef struct {
-    FILE *output_file;
-    AssemblyInstruction instructions[MAX_INSTRUCTIONS];
+    char ir_name[32];     // IR variable name (e.g., "R1", "u", "v", "i", "x")
+    int phys_reg;         // Physical register number (0-63)
+    int valid;            // 1 if mapping is active
+    int is_param;         // 1 if this is a function parameter
+    int is_global;        // 1 if this is a global variable
+} RegisterMapping;
+
+// Assembly generation context - generic for any C- program
+typedef struct {
+    FILE *output;
     int instruction_count;
-    FunctionScope *functions;
-    Variable *global_vars;
-    int current_label_num;
-    int register_usage[MAX_REGISTERS];  // 0 = free, 1 = used
-    FunctionScope *current_function;
-    LabelInfo labels[MAX_LABELS];       // Label tracking
-    int label_count;
-    int stack_level;                    // Current stack nesting level
-    int temp_counter;                   // Temporary variable counter
-    RegisterType last_cmp_reg1;         // Last comparison register 1
-    RegisterType last_cmp_reg2;         // Last comparison register 2
+    RegisterMapping reg_map[128];  // Support many variables
+    int next_temp_reg;             // Next available temporary register
+    char current_function[64];     // Current function name
+    int label_counter;             // For generating unique labels
+    int param_counter;             // Track parameter order in current function
 } AssemblyContext;
 
 // Main assembly generation functions
 void generateAssemblyFromIRImproved(const char *ir_file, const char *assembly_file);
-AssemblyContext* initAssemblyContext(FILE *output);
-void destroyAssemblyContext(AssemblyContext *ctx);
+void initializeContext(AssemblyContext *ctx, FILE *output);
 
-// Instruction generation functions
-void emitInstruction(AssemblyContext *ctx, InstructionType op, 
-                    RegisterType rs, RegisterType rt, RegisterType rd, 
-                    int immediate, const char *label);
-void emitLabel(AssemblyContext *ctx, const char *label);
-void emitJump(AssemblyContext *ctx, int target_line);
+// Core assembly generation functions
+void processIRLine(AssemblyContext *ctx, const char *line);
+int allocateRegister(AssemblyContext *ctx, const char *var_name);
+void resetFunctionContext(AssemblyContext *ctx, const char *func_name);
+int isImmediate(const char *str);
+void emitInstruction(AssemblyContext *ctx, const char *format, ...);
 void emitFunctionLabel(AssemblyContext *ctx, const char *func_name);
-
-// Register management
-RegisterType allocateRegister(AssemblyContext *ctx);
-void freeRegister(AssemblyContext *ctx, RegisterType reg);
-void saveRegisters(AssemblyContext *ctx);
-void restoreRegisters(AssemblyContext *ctx);
-
-// Variable and scope management
-Variable* findVariable(AssemblyContext *ctx, const char *name);
-FunctionScope* findFunction(AssemblyContext *ctx, const char *name);
-void addVariable(AssemblyContext *ctx, const char *name, int scope_level, int size);
-void addFunction(AssemblyContext *ctx, const char *name);
-
-// IR parsing and translation
-void parseIRLine(AssemblyContext *ctx, const char *line);
-void translateIRToAssembly(AssemblyContext *ctx, const char *ir_file);
-
-// Utility functions
-const char* getRegisterName(RegisterType reg);
-const char* getInstructionName(InstructionType instr);
-int isTemporaryRegister(const char *name);
-RegisterType getRegisterFromName(const char *name);
-
-// Main assembly generation function (improved version)
-void generateAssemblyFromIRImproved(const char *ir_file, const char *assembly_file);
 
 #endif
