@@ -1,0 +1,13 @@
+int simple(void) {
+    int x;
+    x = 5;
+    if (x == 5) {
+        return 1;
+    } else {
+        return 0;
+    }
+}
+
+void main(void) {
+    output(simple());
+}

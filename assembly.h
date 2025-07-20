@@ -143,6 +143,7 @@ typedef struct {
     char current_function[64];     // Current function name
     int label_counter;             // For generating unique labels
     int param_counter;             // Track parameter order in current function
+    int current_stack_slots;       // Stack slots allocated for current function
 } AssemblyContext;
 
 // Main assembly generation functions
@@ -155,6 +156,7 @@ int allocateRegister(AssemblyContext *ctx, const char *var_name);
 void resetFunctionContext(AssemblyContext *ctx, const char *func_name);
 int isImmediate(const char *str);
 void emitInstruction(AssemblyContext *ctx, const char *format, ...);
+void emitLabel(AssemblyContext *ctx, const char *format, ...);
 void emitFunctionLabel(AssemblyContext *ctx, const char *func_name);
 
 #endif

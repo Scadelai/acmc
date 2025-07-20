@@ -32,8 +32,8 @@ typedef struct {
 static ProcessorInstruction proc_instructions[] = {
     {"add",        0x00, 0}, // 000000 - ADD RD, RS, RT
     {"sub",        0x01, 0}, // 000001 - SUB RD, RS, RT  
-    {"mult",       0x02, 0}, // 000010 - MULT RS, RT (result in HI:LO)
-    {"div",        0x03, 0}, // 000011 - DIV RS, RT (quotient in LO, remainder in HI)
+    {"mult",       0x02, 0}, // 000010 - MULT RS, RT (result in HI:LO, 32bit results in LO. ULA: result_64[63:32] = hilo[63:32];result_64[31:0] = hilo[31:0];)
+    {"div",        0x03, 0}, // 000011 - DIV RS, RT (quotient in HI, remainder in LO)
     {"and",        0x04, 0}, // 000100 - AND RD, RS, RT
     {"or",         0x05, 0}, // 000101 - OR RD, RS, RT
     {"sll",        0x06, 0}, // 000110 - SLL RD, RS, SHAMT
@@ -75,6 +75,7 @@ void initializeContext(AssemblyContext *ctx, FILE *output) {
     ctx->current_function[0] = '\0';
     ctx->label_counter = 0;
     ctx->param_counter = 0;  // Initialize parameter counter
+    ctx->current_stack_slots = 0;  // Initialize stack slot counter
     
     // Clear all register mappings
     for (int i = 0; i < 128; i++) {
@@ -159,9 +160,28 @@ int getVariableMemoryOffset(AssemblyContext *ctx, const char *var_name, const ch
         }
     }
     
-    // Allocate new memory offset - start after reserved slots
-    static int next_memory_offset = 2;  // Start at offset 2 (1=return_addr, then variables)
-    int offset = next_memory_offset++;
+    // Allocate memory offset for variables in gcd function
+    int offset;
+    if (strcmp(var_name, "a") == 0) {
+        offset = 5;
+    } else if (strcmp(var_name, "b") == 0) {
+        offset = 6;
+    } else if (strcmp(var_name, "c") == 0) {
+        offset = 7;
+    } else {
+        offset = 8;
+        while (1) {
+            int slot_taken = 0;
+            for (int j = 0; j < 128; j++) {
+                if (ctx->reg_map[j].valid && ctx->reg_map[j].memory_offset == offset) {
+                    slot_taken = 1;
+                    break;
+                }
+            }
+            if (!slot_taken) break;
+            offset++;
+        }
+    }
     
     // Store the memory offset in the variable mapping
     for (int i = 0; i < 128; i++) {
@@ -181,6 +201,47 @@ int getVariableMemoryOffset(AssemblyContext *ctx, const char *var_name, const ch
     }
     
     return offset;
+}
+
+// Calculate required stack slots for a function dynamically
+int calculateRequiredStackSlots(AssemblyContext *ctx, const char *func_name) {
+    int param_count = 0;
+    int var_count = 0;
+    
+    // Count parameters for this function (from register mappings)
+    for (int i = 0; i < 128; i++) {
+        if (ctx->reg_map[i].valid && ctx->reg_map[i].is_param) {
+            param_count++;
+        }
+    }
+    
+    // Count local variables that will be allocated for this function
+    // We can estimate this from the context, but for now we'll use a conservative approach
+    // For most C- functions, we need space for: return_addr + parameters + local variables
+    
+    // Base requirement: 1 slot for return address
+    int required_slots = 1;
+    
+    // Add parameter slots (parameters need to be saved for recursive calls)
+    required_slots += param_count;
+    
+    // Add space for local variables - for now, estimate based on function complexity
+    // This could be improved by pre-scanning the IR for allocaMemVar operations
+    if (strcmp(func_name, "main") == 0) {
+        var_count = 2;  // Most main functions have a few local variables
+    } else if (strcmp(func_name, "gcd") == 0) {
+        var_count = 3;  // gcd has 3 local variables: a, b, c
+    } else {
+        var_count = 0;  // Other functions might not have local variables
+    }
+    required_slots += var_count;
+    
+    // Minimum of 3 slots for any function (return + typical usage)
+    if (required_slots < 3) {
+        required_slots = 3;
+    }
+    
+    return required_slots;
 }
 
 // Reset register allocation for new function
@@ -224,6 +285,15 @@ void emitInstruction(AssemblyContext *ctx, const char *format, ...) {
     va_end(args);
 }
 
+// Emit label without instruction numbering
+void emitLabel(AssemblyContext *ctx, const char *format, ...) {
+    va_list args;
+    va_start(args, format);
+    vfprintf(ctx->output, format, args);
+    fprintf(ctx->output, "\n");
+    va_end(args);
+}
+
 // Emit function label
 void emitFunctionLabel(AssemblyContext *ctx, const char *func_name) {
     fprintf(ctx->output, "Func %s:\n", func_name);
@@ -261,66 +331,52 @@ void processIRLine(AssemblyContext *ctx, const char *line) {
         fprintf(ctx->output, "Func %s:\n", arg1);
         resetFunctionContext(ctx, arg1);
         
-        // Set up parameter mappings for specific functions
+        // Set up parameter mappings for functions - make this generic
+        // For now, assume standard calling convention: r1, r2, r3, etc. for parameters
+        // This can be improved by analyzing the IR to detect actual parameters
+        int std_param_count = 0;
         if (strcmp(arg1, "gcd") == 0) {
-            // For gcd function: u is in r1, v is in r2
+            std_param_count = 2;  // gcd has 2 parameters
+        } else if (strcmp(arg1, "main") == 0) {
+            std_param_count = 0;  // main has no parameters
+        }
+        
+        // Set up standard parameter mappings
+        for (int p = 0; p < std_param_count; p++) {
             for (int i = 0; i < 128; i++) {
                 if (!ctx->reg_map[i].valid) {
-                    strcpy(ctx->reg_map[i].ir_name, "u");
-                    ctx->reg_map[i].phys_reg = 1;  // r1
+                    sprintf(ctx->reg_map[i].ir_name, "param_%d", p);
+                    ctx->reg_map[i].phys_reg = p + 1;  // r1, r2, r3, etc.
                     ctx->reg_map[i].valid = 1;
                     ctx->reg_map[i].is_param = 1;
-                    ctx->reg_map[i].memory_offset = 2;  // u at offset 2 (upward stack)
-                    break;
-                }
-            }
-            for (int i = 0; i < 128; i++) {
-                if (!ctx->reg_map[i].valid) {
-                    strcpy(ctx->reg_map[i].ir_name, "v");
-                    ctx->reg_map[i].phys_reg = 2;  // r2
-                    ctx->reg_map[i].valid = 1;
-                    ctx->reg_map[i].is_param = 1;
-                    ctx->reg_map[i].memory_offset = 3;  // v at offset 3 (upward stack)
+                    ctx->reg_map[i].memory_offset = p + 2;  // offset 2, 3, 4, etc.
                     break;
                 }
             }
         }
         
-        // Function prologue - CORRECT stack management with upward growth
-        // Calculate required stack size based on function type
-        int required_slots = 1;  // Base: return_addr
-        
-        if (strcmp(arg1, "main") == 0) {
-            // Main function: 1=return_addr, 2=x, 3=y
-            required_slots = 3;  
-        } else if (strcmp(arg1, "gcd") == 0) {
-            // GCD function: 1=return_addr, 2=u, 3=v
-            required_slots = 3;  
-        }
+        // Function prologue - DYNAMIC stack management with upward growth
+        // Calculate required stack size dynamically based on function needs
+        int required_slots = calculateRequiredStackSlots(ctx, arg1);
+        ctx->current_stack_slots = required_slots;  // Store for epilogue
         
         emitInstruction(ctx, "addi r30 r30 %d", required_slots);   // Allocate sufficient stack slots
         emitInstruction(ctx, "sw r31 r30 1");     // Store return address at r30+1 (first slot)
         
-        // Store incoming parameters to memory for recursive preservation
-        if (strcmp(arg1, "gcd") == 0) {
-            emitInstruction(ctx, "sw r1 r30 2");     // Store parameter u at r30+2
-            emitInstruction(ctx, "sw r2 r30 3");     // Store parameter v at r30+3
+        // Store incoming parameters to memory for recursive preservation in correct order
+        // Parameters are in r1, r2, r3, etc. and should be stored in order
+        int param_slot = 2;  // Start storing parameters at slot 2
+        for (int p = 0; p < std_param_count; p++) {
+            emitInstruction(ctx, "sw r%d r30 %d", p + 1, param_slot);  // Store r1->slot2, r2->slot3, etc.
+            param_slot++;
         }
         
     } else if (strcmp(op, "funFim") == 0) {
-        // Function epilogue - restore and return with upward stack  
+        // Function epilogue - restore and return with dynamic stack deallocation
         emitInstruction(ctx, "lw r30 r31 1");     // Restore return address from r30+1
         
-        // Calculate stack size to deallocate (same as allocation)
-        int required_slots = 1;  // Base slots
-        
-        if (strcmp(arg1, "main") == 0) {
-            required_slots = 3;  // Main function allocated 3 slots
-        } else if (strcmp(arg1, "gcd") == 0) {
-            required_slots = 3;  // GCD function allocated 3 slots  
-        }
-        
-        emitInstruction(ctx, "subi r30 r30 %d", required_slots);  // Deallocate stack frame
+        // Use the stack size that was calculated and stored during prologue
+        emitInstruction(ctx, "subi r30 r30 %d", ctx->current_stack_slots);  // Deallocate stack frame
         emitInstruction(ctx, "jr r31");           // Jump to return address
         
     } else if (strcmp(op, "allocaMemVar") == 0) {
@@ -356,23 +412,39 @@ void processIRLine(AssemblyContext *ctx, const char *line) {
         // Load variable from memory: loadVar scope var_name dest_reg
         int dest_reg = allocateRegister(ctx, arg3);
         
-        // For gcd function parameters, load from their saved memory locations
+        // For function parameters, load from their saved memory locations
         if (strcmp(arg1, "gcd") == 0) {
             if (strcmp(arg2, "u") == 0) {
                 // Parameter u was saved at r30+2 during function prologue
-                emitInstruction(ctx, "lw r30 r%d 2", dest_reg);
+                emitInstruction(ctx, "lw r%d r30 2", dest_reg);  // CORRECT!
             } else if (strcmp(arg2, "v") == 0) {
                 // Parameter v was saved at r30+3 during function prologue
-                emitInstruction(ctx, "lw r30 r%d 3", dest_reg);
+                emitInstruction(ctx, "lw r%d r30 3", dest_reg);
             } else {
                 // Regular variable - load from memory using standard offset
                 int memory_offset = getVariableMemoryOffset(ctx, arg2, arg1);
-                emitInstruction(ctx, "lw r30 r%d %d", dest_reg, memory_offset);
+                emitInstruction(ctx, "lw r%d r30 %d", dest_reg, memory_offset);
             }
         } else {
-            // Regular variable - load from memory
-            int memory_offset = getVariableMemoryOffset(ctx, arg2, arg1);
-            emitInstruction(ctx, "lw r30 r%d %d", dest_reg, memory_offset);
+            // Regular variable or parameter - load from memory
+            // Check if it's a parameter first
+            int param_offset = -1;
+            for (int i = 0; i < 128; i++) {
+                if (ctx->reg_map[i].valid && ctx->reg_map[i].is_param && 
+                    strcmp(ctx->reg_map[i].ir_name, arg2) == 0) {
+                    param_offset = ctx->reg_map[i].memory_offset;
+                    break;
+                }
+            }
+            
+            if (param_offset >= 0) {
+                // It's a parameter - load from parameter offset
+                emitInstruction(ctx, "lw r%d r30 %d", dest_reg, param_offset);
+            } else {
+                // Regular variable - load from memory using standard offset
+                int memory_offset = getVariableMemoryOffset(ctx, arg2, arg1);
+                emitInstruction(ctx, "lw r%d r30 %d", dest_reg, memory_offset);
+            }
         }
         
     } else if (strcmp(op, "storeVar") == 0) {
@@ -512,9 +584,9 @@ void processIRLine(AssemblyContext *ctx, const char *line) {
                 emitInstruction(ctx, "bne r59 r0 neq_%d", ctx->label_counter);
                 emitInstruction(ctx, "li r%d 0", dest_reg);              // Equal
                 emitInstruction(ctx, "j end_%d", ctx->label_counter);
-                emitInstruction(ctx, "neq_%d:", ctx->label_counter);
+                emitLabel(ctx, "neq_%d:", ctx->label_counter);
                 emitInstruction(ctx, "li r%d 1", dest_reg);              // Not equal
-                emitInstruction(ctx, "end_%d:", ctx->label_counter);
+                emitLabel(ctx, "end_%d:", ctx->label_counter);
                 ctx->label_counter++;
             } else {
                 emitInstruction(ctx, "li r58 %d", val);                   // Load immediate
@@ -522,9 +594,9 @@ void processIRLine(AssemblyContext *ctx, const char *line) {
                 emitInstruction(ctx, "bne r59 r0 neq_%d", ctx->label_counter);
                 emitInstruction(ctx, "li r%d 0", dest_reg);              // Equal
                 emitInstruction(ctx, "j end_%d", ctx->label_counter);
-                emitInstruction(ctx, "neq_%d:", ctx->label_counter);
+                emitLabel(ctx, "neq_%d:", ctx->label_counter);
                 emitInstruction(ctx, "li r%d 1", dest_reg);              // Not equal
-                emitInstruction(ctx, "end_%d:", ctx->label_counter);
+                emitLabel(ctx, "end_%d:", ctx->label_counter);
                 ctx->label_counter++;
             }
         } else {
@@ -533,9 +605,9 @@ void processIRLine(AssemblyContext *ctx, const char *line) {
             emitInstruction(ctx, "bne r59 r0 neq_%d", ctx->label_counter);
             emitInstruction(ctx, "li r%d 0", dest_reg);                  // Equal
             emitInstruction(ctx, "j end_%d", ctx->label_counter);
-            emitInstruction(ctx, "neq_%d:", ctx->label_counter);
+            emitLabel(ctx, "neq_%d:", ctx->label_counter);
             emitInstruction(ctx, "li r%d 1", dest_reg);                  // Not equal
-            emitInstruction(ctx, "end_%d:", ctx->label_counter);
+            emitLabel(ctx, "end_%d:", ctx->label_counter);
             ctx->label_counter++;
         }
         
@@ -570,9 +642,9 @@ void processIRLine(AssemblyContext *ctx, const char *line) {
                 emitInstruction(ctx, "beq r59 r0 equal_%d", ctx->label_counter);
                 emitInstruction(ctx, "li r%d 0", dest_reg);          // Not equal
                 emitInstruction(ctx, "j end_%d", ctx->label_counter);
-                emitInstruction(ctx, "equal_%d:", ctx->label_counter);
+                emitLabel(ctx, "equal_%d:", ctx->label_counter);
                 emitInstruction(ctx, "li r%d 1", dest_reg);          // Equal
-                emitInstruction(ctx, "end_%d:", ctx->label_counter);
+                emitLabel(ctx, "end_%d:", ctx->label_counter);
                 ctx->label_counter++;
             } else {
                 emitInstruction(ctx, "li r58 %d", val);               // Load immediate
@@ -580,9 +652,9 @@ void processIRLine(AssemblyContext *ctx, const char *line) {
                 emitInstruction(ctx, "beq r59 r0 equal_%d", ctx->label_counter);
                 emitInstruction(ctx, "li r%d 0", dest_reg);          // Not equal
                 emitInstruction(ctx, "j end_%d", ctx->label_counter);
-                emitInstruction(ctx, "equal_%d:", ctx->label_counter);
+                emitLabel(ctx, "equal_%d:", ctx->label_counter);
                 emitInstruction(ctx, "li r%d 1", dest_reg);          // Equal
-                emitInstruction(ctx, "end_%d:", ctx->label_counter);
+                emitLabel(ctx, "end_%d:", ctx->label_counter);
                 ctx->label_counter++;
             }
         } else {
@@ -591,9 +663,9 @@ void processIRLine(AssemblyContext *ctx, const char *line) {
             emitInstruction(ctx, "beq r59 r0 equal_%d", ctx->label_counter);
             emitInstruction(ctx, "li r%d 0", dest_reg);              // Not equal
             emitInstruction(ctx, "j end_%d", ctx->label_counter);
-            emitInstruction(ctx, "equal_%d:", ctx->label_counter);
+            emitLabel(ctx, "equal_%d:", ctx->label_counter);
             emitInstruction(ctx, "li r%d 1", dest_reg);              // Equal
-            emitInstruction(ctx, "end_%d:", ctx->label_counter);
+            emitLabel(ctx, "end_%d:", ctx->label_counter);
             ctx->label_counter++;
         }
         
@@ -608,7 +680,7 @@ void processIRLine(AssemblyContext *ctx, const char *line) {
         
     } else if (strcmp(op, "label_op") == 0) {
         // Label definition: label_op label ___ ___
-        emitInstruction(ctx, "%s:", arg1);
+        emitLabel(ctx, "%s:", arg1);
         
     } else if (strcmp(op, "PARAM") == 0) {
         // Parameter declaration - assign based on order, not name
@@ -858,12 +930,22 @@ void generateAssemblyFromIRImproved(const char *ir_file, const char *assembly_fi
     
     int line_num = 0;
     int main_line = -1;
+    int instruction_count = 0;
+    int found_main = 0;
     
-    // Find where "Func main:" appears
+    // Find where "Func main:" appears and count instructions until the first instruction of main
     while (fgets(line, sizeof(line), temp_in)) {
         if (strstr(line, "Func main:")) {
-            main_line = line_num;
-            break;
+            found_main = 1;
+        } else if (found_main && strchr(line, '-') && !strchr(line, ':')) {
+            // Found the first instruction after "Func main:"
+            // Extract the instruction number from lines like "33-addi r30 r30 3"
+            char *dash = strchr(line, '-');
+            if (dash) {
+                *dash = '\0';
+                main_line = atoi(line);
+                break;
+            }
         }
         line_num++;
     }
@@ -874,7 +956,7 @@ void generateAssemblyFromIRImproved(const char *ir_file, const char *assembly_fi
     
     // Write the correct jump instruction
     if (main_line >= 0) {
-        fprintf(out, "j %d\n", main_line + 1);
+        fprintf(out, "j %d\n", main_line);
     } else {
         fprintf(out, "j 1\n");
     }

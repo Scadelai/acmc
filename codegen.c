@@ -27,6 +27,7 @@
 #include "util.h"
 #include "symtab.h"
 #include "assembly.h"
+#include "binary_generator.h"
 #include <string.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -1784,6 +1785,19 @@ void generateAssemblyFromIR(const char *irOutputFile, const char *sourceFilename
         strcat(assemblyFilename, ".asm");
     }
     
+    // Generate assembly from IR
     generateAssemblyFromIRImproved(irOutputFile, assemblyFilename);
     printf("✓ Código Assembly gerado em %s\n", assemblyFilename);
+    
+    // Generate binary files (.bin and .binbd) from assembly
+    generateBinaryWithAutoNaming(assemblyFilename);
+    
+    // Generate clean filenames for output messages
+    char baseFilename[256];
+    strcpy(baseFilename, assemblyFilename);
+    char *asmDot = strrchr(baseFilename, '.');
+    if (asmDot) *asmDot = '\0';
+    
+    printf("✓ Código Binário limpo gerado em %s.bin\n", baseFilename);
+    printf("✓ Código Binário comentado gerado em %s.binbd\n", baseFilename);
 }

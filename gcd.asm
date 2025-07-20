@@ -1,4 +1,4 @@
-j 38
+j 33
 Func gcd:
 1-addi r30 r30 3
 2-sw r31 r30 1
@@ -9,50 +9,50 @@ Func gcd:
 7-beq r59 r0 equal_0
 8-li r5 0
 9-j end_0
-10-equal_0:
-11-li r5 1
-12-end_0:
-13-beq r5 r0 L0
-14-lw r30 r4 2
-15-move r28 r4
-16-j L1
-17-L0:
-18-lw r30 r4 3
-19-move r1 r4
-20-lw r30 r4 2
-21-lw r30 r5 2
-22-lw r30 r6 3
-23-div r5 r6
-24-mfhi r7
-25-lw r30 r5 3
-26-mult r7 r5
-27-mflo r6
-28-sub r5 r4 r6
-29-move r2 r5
-30-jal gcd
-31-move r4 r28
-32-move r28 r4
-33-L1:
-34-lw r30 r31 1
-35-addi r30 r30 -3
-36-jr r31
+equal_0:
+10-li r5 1
+end_0:
+11-beq r5 r0 L0
+12-lw r30 r4 2
+13-move r28 r4
+14-j L1
+L0:
+15-lw r30 r4 3
+16-move r1 r4
+17-lw r30 r4 2
+18-lw r30 r5 2
+19-lw r30 r6 3
+20-div r5 r6
+21-mfhi r7
+22-lw r30 r5 3
+23-mult r7 r5
+24-mflo r6
+25-sub r5 r4 r6
+26-move r2 r5
+27-jal gcd
+28-move r4 r28
+29-move r28 r4
+L1:
+30-lw r30 r31 1
+31-subi r30 r30 3
+32-jr r31
 Func main:
-37-addi r30 r30 3
-38-sw r31 r30 1
-39-input r28
-40-move r4 r28
-41-sw r4 r30 2
-42-input r28
-43-move r4 r28
-44-sw r4 r30 3
-45-lw r30 r4 2
-46-move r1 r4
-47-lw r30 r4 3
-48-move r2 r4
-49-jal gcd
-50-move r4 r28
-51-move r1 r4
-52-outputreg r1
-53-lw r30 r31 1
-54-addi r30 r30 -3
-55-jr r31
+33-addi r30 r30 3
+34-sw r31 r30 1
+35-input r28
+36-move r4 r28
+37-sw r4 r30 2
+38-input r28
+39-move r4 r28
+40-sw r4 r30 3
+41-lw r30 r4 2
+42-move r1 r4
+43-lw r30 r4 3
+44-move r2 r4
+45-jal gcd
+46-move r4 r28
+47-move r1 r4
+48-outputreg r1
+49-lw r30 r31 1
+50-subi r30 r30 3
+51-jr r31

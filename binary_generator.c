@@ -32,62 +32,62 @@ typedef struct {
     char description[64];
 } ProcessorInstruction;
 
-// Complete instruction set from instrucoes_processador.md
+// Complete instruction set from instrucoes_processador.md with correct binary opcodes
 static ProcessorInstruction instructions[] = {
     // Arithmetic and Logic (R-type)
-    {"add",        0x00, FORMAT_R, "ADD RD, RS, RT"},
-    {"sub",        0x01, FORMAT_R, "SUB RD, RS, RT"},
-    {"mult",       0x02, FORMAT_R, "MULT RS, RT (result in HI:LO)"},
-    {"div",        0x03, FORMAT_R, "DIV RS, RT (quotient in LO, remainder in HI)"},
-    {"and",        0x04, FORMAT_R, "AND RD, RS, RT"},
-    {"or",         0x05, FORMAT_R, "OR RD, RS, RT"},
-    {"sll",        0x06, FORMAT_R, "SLL RD, RS, SHAMT"},
-    {"srl",        0x07, FORMAT_R, "SRL RD, RS, SHAMT"},
-    {"slt",        0x08, FORMAT_R, "SLT RD, RS, RT"},
+    {"add",        0x00, FORMAT_R, "ADD RD, RS, RT"},        // 000000
+    {"sub",        0x01, FORMAT_R, "SUB RD, RS, RT"},        // 000001
+    {"mult",       0x02, FORMAT_R, "MULT RS, RT"},           // 000010
+    {"div",        0x03, FORMAT_R, "DIV RS, RT"},            // 000011
+    {"and",        0x04, FORMAT_R, "AND RD, RS, RT"},        // 000100
+    {"or",         0x05, FORMAT_R, "OR RD, RS, RT"},         // 000101
+    {"sll",        0x06, FORMAT_R, "SLL RD, RS, SHAMT"},     // 000110
+    {"srl",        0x07, FORMAT_R, "SRL RD, RS, SHAMT"},     // 000111
+    {"slt",        0x08, FORMAT_R, "SLT RD, RS, RT"},        // 001000
     
     // Movement (R-type)
-    {"mfhi",       0x09, FORMAT_R, "MFHI RD"},
-    {"mflo",       0x0A, FORMAT_R, "MFLO RD"},
-    {"move",       0x0B, FORMAT_R, "MOVE RD, RS"},
+    {"mfhi",       0x09, FORMAT_R, "MFHI RD"},               // 001001
+    {"mflo",       0x0A, FORMAT_R, "MFLO RD"},               // 001010
+    {"move",       0x0B, FORMAT_R, "MOVE RD, RS"},           // 001011
     
     // Jump Register (R-type)
-    {"jr",         0x0C, FORMAT_R, "JR RS"},
-    {"jalr",       0x0D, FORMAT_R, "JALR RS"},
+    {"jr",         0x0C, FORMAT_R, "JR RS"},                 // 001100
+    {"jalr",       0x0D, FORMAT_R, "JALR RS"},               // 001101
     
     // Load Address (I-type)
-    {"la",         0x0E, FORMAT_I, "LA RT, ADDRESS"},
+    {"la",         0x0E, FORMAT_I, "LA RT, ADDRESS"},        // 001110
     
     // Immediate operations (I-type)
-    {"addi",       0x0F, FORMAT_I, "ADDI RT, RS, IMMEDIATE"},
-    {"subi",       0x10, FORMAT_I, "SUBI RT, RS, IMMEDIATE"},
-    {"andi",       0x11, FORMAT_I, "ANDI RT, RS, IMMEDIATE"},
-    {"ori",        0x12, FORMAT_I, "ORI RT, RS, IMMEDIATE"},
+    {"addi",       0x0F, FORMAT_I, "ADDI RT, RS, IMMEDIATE"}, // 001111
+    {"subi",       0x10, FORMAT_I, "SUBI RT, RS, IMMEDIATE"}, // 010000
+    {"andi",       0x11, FORMAT_I, "ANDI RT, RS, IMMEDIATE"}, // 010001
+    {"ori",        0x12, FORMAT_I, "ORI RT, RS, IMMEDIATE"},  // 010010
     
-    // Branch instructions (I-type)
-    {"beq",        0x13, FORMAT_I, "BEQ RS, RT, ADDRESS"},
-    {"bne",        0x14, FORMAT_I, "BNE RS, RT, ADDRESS"},
-    {"bgt",        0x15, FORMAT_I, "BGT RS, RT, ADDRESS"},
-    {"bgte",       0x16, FORMAT_I, "BGTE RS, RT, ADDRESS"},
-    {"blt",        0x17, FORMAT_I, "BLT RS, RT, ADDRESS"},
-    {"blte",       0x18, FORMAT_I, "BLTE RS, RT, ADDRESS"},
+    // Branch instructions (I-type with address in [5:0])
+    {"beq",        0x13, FORMAT_I, "BEQ RS, RT, ADDRESS"},   // 010011
+    {"bne",        0x14, FORMAT_I, "BNE RS, RT, ADDRESS"},   // 010100
+    {"bgt",        0x15, FORMAT_I, "BGT RS, RT, ADDRESS"},   // 010101
+    {"bgte",       0x16, FORMAT_I, "BGTE RS, RT, ADDRESS"},  // 010110
+    {"blt",        0x17, FORMAT_I, "BLT RS, RT, ADDRESS"},   // 010111
+    {"blte",       0x18, FORMAT_I, "BLTE RS, RT, ADDRESS"},  // 011000
     
     // Memory operations (I-type)
-    {"lw",         0x19, FORMAT_I, "LW RT, OFFSET(RS)"},
-    {"sw",         0x1A, FORMAT_I, "SW RT, OFFSET(RS)"},
-    {"li",         0x1B, FORMAT_I, "LI RT, IMMEDIATE"},
+    {"lw",         0x19, FORMAT_I, "LW RT, OFFSET(RS)"},     // 011001
+    {"sw",         0x1A, FORMAT_I, "SW RT, OFFSET(RS)"},     // 011010
+    {"li",         0x1B, FORMAT_I, "LI RT, IMMEDIATE"},      // 011011
     
     // Jump instructions (J-type)
-    {"j",          0x1C, FORMAT_J, "J ADDRESS"},
-    {"jal",        0x1D, FORMAT_J, "JAL ADDRESS"},
+    {"j",          0x1C, FORMAT_J, "J ADDRESS"},             // 011100
+    {"jal",        0x1D, FORMAT_J, "JAL ADDRESS"},           // 011101
     
     // Control (R-type)
-    {"halt",       0x1E, FORMAT_R, "HALT"},
+    {"halt",       0x1E, FORMAT_R, "HALT"},                  // 011110
     
     // I/O instructions
-    {"outputmem",  0x1F, FORMAT_I, "OUTPUTMEM RS, ADDRESS"},
-    {"outputreg",  0x20, FORMAT_R, "OUTPUTREG RS"},
-    {"outputreset",0x21, FORMAT_R, "OUTPUT RESET"},
-    {"input",      0x22, FORMAT_R, "INPUT RD"},
+    {"outputmem",  0x1F, FORMAT_I, "OUTPUTMEM RS, ADDRESS"}, // 011111
+    {"outputreg",  0x20, FORMAT_R, "OUTPUTREG RS"},          // 100000
+    {"outputreset",0x21, FORMAT_R, "OUTPUT RESET"},          // 100001
+    {"input",      0x22, FORMAT_R, "INPUT RD"},              // 100010
 };
 
 #define NUM_INSTRUCTIONS (sizeof(instructions) / sizeof(instructions[0]))
@@ -155,11 +155,22 @@ uint32_t generateRType(ProcessorInstruction *instr, int rs, int rt, int rd, int 
 uint32_t generateIType(ProcessorInstruction *instr, int rs, int rt, int immediate) {
     uint32_t binary = 0;
     
-    // Format: [31:26] OPCODE | [25:20] RS | [19:14] RT | [13:0] IMMEDIATE
-    binary |= ((uint32_t)instr->opcode & 0x3F) << 26;  // OPCODE [31:26]
-    binary |= ((uint32_t)rs & 0x3F) << 20;             // RS [25:20]
-    binary |= ((uint32_t)rt & 0x3F) << 14;             // RT [19:14]
-    binary |= ((uint32_t)immediate & 0x3FFF);          // IMMEDIATE [13:0]
+    // Special handling for branch instructions - address goes in [5:0]
+    if (strcmp(instr->mnemonic, "beq") == 0 || strcmp(instr->mnemonic, "bne") == 0 ||
+        strcmp(instr->mnemonic, "bgt") == 0 || strcmp(instr->mnemonic, "bgte") == 0 ||
+        strcmp(instr->mnemonic, "blt") == 0 || strcmp(instr->mnemonic, "blte") == 0) {
+        // Branch format: [31:26] OPCODE | [25:20] RS | [19:14] RT | [13:6] unused | [5:0] ADDRESS
+        binary |= ((uint32_t)instr->opcode & 0x3F) << 26;  // OPCODE [31:26]
+        binary |= ((uint32_t)rs & 0x3F) << 20;             // RS [25:20]
+        binary |= ((uint32_t)rt & 0x3F) << 14;             // RT [19:14]
+        binary |= ((uint32_t)immediate & 0x3F);            // ADDRESS [5:0]
+    } else {
+        // Regular I-type format: [31:26] OPCODE | [25:20] RS | [19:14] RT | [13:0] IMMEDIATE
+        binary |= ((uint32_t)instr->opcode & 0x3F) << 26;  // OPCODE [31:26]
+        binary |= ((uint32_t)rs & 0x3F) << 20;             // RS [25:20]
+        binary |= ((uint32_t)rt & 0x3F) << 14;             // RT [19:14]
+        binary |= ((uint32_t)immediate & 0x3FFF);          // IMMEDIATE [13:0]
+    }
     
     return binary;
 }
@@ -194,9 +205,13 @@ uint32_t parseInstruction(const char *line, uint32_t pc) {
     }
     
     // Skip function headers and other non-numbered comments
-    if (strstr(instr_copy, "Func") || strstr(instr_copy, "CEHOLDER") || 
-        strstr(instr_copy, "Label")) {
+    if (strstr(instr_copy, "Func") || strstr(instr_copy, "CEHOLDER")) {
         return 0xFFFFFFFF; // Special marker for non-instruction lines
+    }
+    
+    // Skip labels (lines ending with ':')
+    if (strchr(instr_copy, ':')) {
+        return 0xFFFFFFFF; // Skip label definitions
     }
     
     // Skip single letter lines like "R" which are assembly artifacts
@@ -296,6 +311,12 @@ uint32_t parseInstruction(const char *line, uint32_t pc) {
                     rt = parseRegister(tokens[1]);
                     immediate = parseImmediate(tokens[2]);
                 }
+            } else if (strcmp(instr->mnemonic, "la") == 0) {
+                // Format: LA RT, ADDRESS (RT in [19:14] position)
+                if (token_count >= 3) {
+                    rt = parseRegister(tokens[1]);
+                    immediate = parseImmediate(tokens[2]);
+                }
             } else if (strstr(instr->mnemonic, "b") == instr->mnemonic) {
                 // Branch instructions: BEQ RS, RT, ADDRESS
                 if (token_count >= 4) {
@@ -316,6 +337,12 @@ uint32_t parseInstruction(const char *line, uint32_t pc) {
                     if (token_count > 3) {
                         immediate = parseImmediate(tokens[3]);
                     }
+                }
+            } else if (strcmp(instr->mnemonic, "outputmem") == 0) {
+                // Format: OUTPUTMEM RS, ADDRESS
+                if (token_count >= 3) {
+                    rs = parseRegister(tokens[1]);
+                    immediate = parseImmediate(tokens[2]);
                 }
             }
             
@@ -351,49 +378,67 @@ void collectLabels(FILE *asm_file) {
         while (*trimmed_line == ' ' || *trimmed_line == '\t') trimmed_line++;
         if (*trimmed_line == '\0') continue;
         
-        // Check for label definitions (e.g., "11-# Label L0:")
-        if (strstr(trimmed_line, "Label") && strchr(trimmed_line, ':')) {
-            char *label_start = strstr(trimmed_line, "Label");
-            label_start += 6; // Skip "Label "
-            while (*label_start == ' ') label_start++;
+        // Check for numbered instructions to track pc properly
+        char *dash = strchr(trimmed_line, '-');
+        if (dash) {
+            // Extract instruction number
+            char *number_end = dash;
+            *number_end = '\0';
+            int instruction_number = atoi(trimmed_line);
+            *number_end = '-'; // Restore the dash
             
-            char *colon = strchr(label_start, ':');
+            char *after_dash = dash + 1;
+            while (*after_dash == ' ' || *after_dash == '\t') after_dash++;
+            
+            // Update pc to match instruction number
+            if (!strstr(after_dash, "Func") && !strstr(after_dash, "CEHOLDER") && 
+                !strchr(after_dash, ':') && after_dash[0] != '#') {
+                pc = instruction_number;
+            }
+        }
+        
+        // Check for function definitions (e.g., "Func gcd:")
+        if (strstr(trimmed_line, "Func ") && strchr(trimmed_line, ':')) {
+            char *func_start = strstr(trimmed_line, "Func ");
+            func_start += 5; // Skip "Func "
+            while (*func_start == ' ') func_start++;
+            
+            char *colon = strchr(func_start, ':');
             if (colon) {
                 *colon = '\0';
-                strcpy(labels[label_count].name, label_start);
-                labels[label_count].address = pc;
+                strcpy(labels[label_count].name, func_start);
+                labels[label_count].address = pc; // Next instruction will be at this PC
                 label_count++;
             }
         }
         
-        // Count actual instructions (including numbered comments as NOPs)
-        char *dash = strchr(trimmed_line, '-');
-        if (dash) {
-            char *after_dash = dash + 1;
-            while (*after_dash == ' ' || *after_dash == '\t') after_dash++;
+        // Check for label definitions (simple labels like "L0:", "equal_0:", etc.)
+        else if (strchr(trimmed_line, ':') && !strstr(trimmed_line, "Func")) {
+            char *colon = strchr(trimmed_line, ':');
+            *colon = '\0';
             
-            // If it's a numbered line, count it (even if it's a comment)
-            if (after_dash[0] != '#' || (after_dash[0] == '#')) {
-                // Skip only function headers and labels
-                if (!strstr(after_dash, "Func") && !strstr(after_dash, "CEHOLDER") && 
-                    !strstr(after_dash, "Label")) {
-                    pc++;
-                }
-            }
-        } else {
-            // Non-numbered lines - only count if they're not comments/headers
-            if (trimmed_line[0] != '#' && !strstr(trimmed_line, "Func") && 
-                !strstr(trimmed_line, "CEHOLDER") && !strstr(trimmed_line, "Label")) {
-                pc++;
-            }
+            // Remove any number prefix (e.g., "10-equal_0:" -> "equal_0")
+            char *dash_in_label = strchr(trimmed_line, '-');
+            char *label_name = dash_in_label ? dash_in_label + 1 : trimmed_line;
+            while (*label_name == ' ' || *label_name == '\t') label_name++;
+            
+            strcpy(labels[label_count].name, label_name);
+            labels[label_count].address = pc + 1; // Points to next instruction after current pc
+            label_count++;
+        }
+        
+        // For non-numbered lines like "j 39", increment pc
+        if (!dash && trimmed_line[0] != '#' && !strstr(trimmed_line, "Func") && 
+            !strstr(trimmed_line, "CEHOLDER") && !strchr(trimmed_line, ':')) {
+            pc++;
         }
     }
     
     rewind(asm_file);
 }
 
-// Print binary in formatted style
-void printBinary(FILE *output, uint32_t binary, uint32_t address, const char *original_line) {
+// Print binary in formatted style (with comments)
+void printBinaryWithComments(FILE *output, uint32_t binary, uint32_t address, const char *original_line) {
     // Print 32-bit binary with field separators
     fprintf(output, "# Address %u: %s\n", address, original_line);
     
@@ -415,7 +460,11 @@ void printBinary(FILE *output, uint32_t binary, uint32_t address, const char *or
             if (instructions[i].format == FORMAT_R) {
                 fprintf(output, ", RS=R%u, RT=R%u, RD=R%u", rs, rt, rd);
             } else if (instructions[i].format == FORMAT_I) {
-                fprintf(output, ", RS=R%u, RT=R%u, IMM=%u", rs, rt, immediate);
+                if (strstr(instructions[i].mnemonic, "b") == instructions[i].mnemonic) {
+                    fprintf(output, ", RS=R%u, RT=R%u, ADDR=%u", rs, rt, address_field);
+                } else {
+                    fprintf(output, ", RS=R%u, RT=R%u, IMM=%u", rs, rt, immediate);
+                }
             } else if (instructions[i].format == FORMAT_J) {
                 fprintf(output, ", ADDR=%u", address_field);
             }
@@ -435,26 +484,43 @@ void printBinary(FILE *output, uint32_t binary, uint32_t address, const char *or
     fprintf(output, "\n\n");
 }
 
-// Main binary generation function
-void generateBinaryFromAssembly(const char *asm_filename, const char *bin_filename) {
+// Print binary in clean format (no comments)
+void printBinaryClean(FILE *output, uint32_t binary) {
+    // Print 32-bit binary as single line
+    for (int i = 31; i >= 0; i--) {
+        fprintf(output, "%d", (binary >> i) & 1);
+    }
+    fprintf(output, "\n");
+}
+
+// Main binary generation function - generates both formats
+void generateBinaryFromAssembly(const char *asm_filename, const char *clean_bin_filename, const char *commented_bin_filename) {
     FILE *asm_file = fopen(asm_filename, "r");
     if (!asm_file) {
         printf("Error: Cannot open assembly file %s\n", asm_filename);
         return;
     }
     
-    FILE *bin_file = fopen(bin_filename, "w");
-    if (!bin_file) {
-        printf("Error: Cannot create binary file %s\n", bin_filename);
+    FILE *clean_bin_file = fopen(clean_bin_filename, "w");
+    if (!clean_bin_file) {
+        printf("Error: Cannot create clean binary file %s\n", clean_bin_filename);
         fclose(asm_file);
         return;
     }
     
-    // Header
-    fprintf(bin_file, "# Binary representation of %s\n", asm_filename);
-    fprintf(bin_file, "# Format: [31:26] OPCODE | [25:20] RS | [19:14] RT | [13:8] RD | [7:0] IMEDIATO/ENDEREÇO\n");
-    fprintf(bin_file, "# Architecture: Custom MIPS with 64 registers, 32-bit instructions\n");
-    fprintf(bin_file, "# Special Registers: R0=zero, R31=return, R62=LO, R63=HI, R30=stack\n\n");
+    FILE *commented_bin_file = fopen(commented_bin_filename, "w");
+    if (!commented_bin_file) {
+        printf("Error: Cannot create commented binary file %s\n", commented_bin_filename);
+        fclose(asm_file);
+        fclose(clean_bin_file);
+        return;
+    }
+    
+    // Header for commented version
+    fprintf(commented_bin_file, "# Binary representation of %s\n", asm_filename);
+    fprintf(commented_bin_file, "# Format: [31:26] OPCODE | [25:20] RS | [19:14] RT | [13:8] RD | [7:0] IMEDIATO/ENDEREÇO\n");
+    fprintf(commented_bin_file, "# Architecture: Custom MIPS with 64 registers, 32-bit instructions\n");
+    fprintf(commented_bin_file, "# Special Registers: R0=zero, R31=return, R62=LO, R63=HI, R30=stack\n\n");
     
     // First pass: collect labels
     label_count = 0;
@@ -481,44 +547,57 @@ void generateBinaryFromAssembly(const char *asm_filename, const char *bin_filena
         char original_line[512];
         strcpy(original_line, line);
         
-    // Generate binary for instruction
-    uint32_t binary = parseInstruction(line, pc);
-    
-    if (binary == 0xFFFFFFFF) {
-        // Skip non-instruction lines (function headers, labels) - don't increment PC
-        continue;
-    } else if (binary == 0) {
-        // Check if this is really a numbered comment or just a malformed line
-        char *dash = strchr(line, '-');
-        if (dash) {
-            // This is a numbered line (even if comment) - should count
-            printBinary(bin_file, 0, pc, original_line);
-            pc++;
-        } else {
-            // Non-numbered line that parsed as 0 - just skip
+        // Generate binary for instruction
+        uint32_t binary = parseInstruction(line, pc);
+        
+        if (binary == 0xFFFFFFFF) {
+            // Skip non-instruction lines (function headers, labels) - don't increment PC
             continue;
+        } else if (binary == 0) {
+            // Check if this is really a numbered comment or just a malformed line
+            char *dash = strchr(line, '-');
+            if (dash) {
+                // This is a numbered line (even if comment) - should count
+                printBinaryWithComments(commented_bin_file, 0, pc, original_line);
+                printBinaryClean(clean_bin_file, 0);
+                pc++;
+            } else {
+                // Non-numbered line that parsed as 0 - just skip
+                continue;
+            }
+        } else {
+            // Real instruction
+            printBinaryWithComments(commented_bin_file, binary, pc, original_line);
+            printBinaryClean(clean_bin_file, binary);
+            pc++;
         }
-    } else {
-        // Real instruction
-        printBinary(bin_file, binary, pc, original_line);
-        pc++;
-    }
     }
     
     fclose(asm_file);
-    fclose(bin_file);
+    fclose(clean_bin_file);
+    fclose(commented_bin_file);
     
-    printf("Binary generation completed: %s\n", bin_filename);
+    printf("Binary generation completed:\n");
+    printf("  Clean binary: %s\n", clean_bin_filename);
+    printf("  Commented binary: %s\n", commented_bin_filename);
     printf("Generated %u binary instructions\n", pc);
 }
 
-int main(int argc, char *argv[]) {
-    if (argc != 3) {
-        printf("Usage: %s <assembly_file> <binary_file>\n", argv[0]);
-        printf("Example: %s gcd.asm gcd.bin\n", argv[0]);
-        return 1;
-    }
+// Convenience function with automatic naming
+void generateBinaryWithAutoNaming(const char *base_filename) {
+    // Extract base name without extension
+    char base_name[256];
+    strcpy(base_name, base_filename);
+    char *dot = strrchr(base_name, '.');
+    if (dot) *dot = '\0';
     
-    generateBinaryFromAssembly(argv[1], argv[2]);
-    return 0;
+    // Generate filenames
+    char clean_filename[300];
+    char commented_filename[300];
+    snprintf(clean_filename, sizeof(clean_filename), "%s.bin", base_name);
+    snprintf(commented_filename, sizeof(commented_filename), "%s.binbd", base_name);
+    
+    generateBinaryFromAssembly(base_filename, clean_filename, commented_filename);
 }
+
+// End of binary_generator.c - integrated as library
