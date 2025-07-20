@@ -1,47 +1,58 @@
-0-j 27
-R
+j 38
 Func gcd:
-1-sw r31 r30 1
-2-addi r30 r30 1
-3-# Parameter u in r1
-4-# Parameter v in r2
-5-sub r59 r2 r0
-6-bne r59 r0 L0
-7-move r28 r1
-8-lw r30 r31 1
-9-jr r31
-10-j L1
-11-# Label L0:
-12-div r1 r2
-13-mflo r9
-14-mult r9 r2
-15-mflo r10
-16-sub r11 r1 r10
-17-move r28 r2
-18-move r28 r11
-19-jal gcd
-20-move r12 r28
-21-move r28 r12
-22-lw r30 r31 1
-23-jr r31
-24-# Label L1:
-25-lw r30 r31 1
-26-jr r31
-CEHOLDER
+1-addi r30 r30 3
+2-sw r31 r30 1
+3-sw r1 r30 2
+4-sw r2 r30 3
+5-lw r30 r4 3
+6-sub r59 r4 r0
+7-beq r59 r0 equal_0
+8-li r5 0
+9-j end_0
+10-equal_0:
+11-li r5 1
+12-end_0:
+13-beq r5 r0 L0
+14-lw r30 r4 2
+15-move r28 r4
+16-j L1
+17-L0:
+18-lw r30 r4 3
+19-move r1 r4
+20-lw r30 r4 2
+21-lw r30 r5 2
+22-lw r30 r6 3
+23-div r5 r6
+24-mfhi r7
+25-lw r30 r5 3
+26-mult r7 r5
+27-mflo r6
+28-sub r5 r4 r6
+29-move r2 r5
+30-jal gcd
+31-move r4 r28
+32-move r28 r4
+33-L1:
+34-lw r30 r31 1
+35-addi r30 r30 -3
+36-jr r31
 Func main:
-27-sw r31 r30 1
-28-addi r30 r30 1
-29-input r28
-30-move r15 r28
-31-move r4 r15
-32-input r28
-33-move r17 r28
-34-move r5 r17
-35-move r28 r4
-36-move r28 r5
-37-jal gcd
-38-move r19 r28
-39-move r28 r19
-40-outputreg r28
-41-lw r30 r31 1
-42-jr r31
+37-addi r30 r30 3
+38-sw r31 r30 1
+39-input r28
+40-move r4 r28
+41-sw r4 r30 2
+42-input r28
+43-move r4 r28
+44-sw r4 r30 3
+45-lw r30 r4 2
+46-move r1 r4
+47-lw r30 r4 3
+48-move r2 r4
+49-jal gcd
+50-move r4 r28
+51-move r1 r4
+52-outputreg r1
+53-lw r30 r31 1
+54-addi r30 r30 -3
+55-jr r31

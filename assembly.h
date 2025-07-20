@@ -128,6 +128,7 @@ typedef struct FunctionScope {
 typedef struct {
     char ir_name[32];     // IR variable name (e.g., "R1", "u", "v", "i", "x")
     int phys_reg;         // Physical register number (0-63)
+    int memory_offset;    // Memory offset for variable storage (stack-relative)
     int valid;            // 1 if mapping is active
     int is_param;         // 1 if this is a function parameter
     int is_global;        // 1 if this is a global variable

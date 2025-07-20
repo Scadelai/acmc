@@ -1,20 +1,25 @@
 /*
- * CONJUNTO DE INSTRUÇÕES IR:
+ * CONJUNTO DE INSTRUÇÕES IR FUNDAMENTAIS:
  * - FUNC_BEGIN/END_FUNC: Delimitadores de função
+ * - ALLOCA_MEM_VAR: Alocação de memória para variáveis
+ * - ALLOCA_MEM_VET: Alocação de memória para arrays
+ * - LOAD_VAR: Carregamento de variável da memória para registrador
+ * - LOAD_VET: Carregamento de elemento de array para registrador
+ * - STORE_VAR: Armazenamento de registrador na memória de variável
+ * - STORE_VET: Armazenamento de registrador em elemento de array
  * - PARAM/LOCAL: Declarações de parâmetros e variáveis locais
- * - MOV: Movimentação de dados entre variáveis
  * - ADD/SUB/MUL/DIV: Operações aritméticas
  * - CMP: Comparação entre valores
  * - BR_EQ/BR_NE/BR_LT/BR_LE/BR_GT/BR_GE: Saltos condicionais
  * - GOTO: Salto incondicional
- * - LOAD_ARRAY/STORE_ARRAY: Acesso a elementos de array
  * - ARG/CALL/STORE_RET: Chamadas de função e retorno
  * - RETURN/RETURN_VOID: Comandos de retorno
  * 
  * ESTRUTURA DE PROCESSAMENTO:
- * 1. Primeiro passo: Coleta declarações de variáveis globais
- * 2. Segundo passo: Gera código para cada função individualmente
- * 3. Usa sistema de buffer para permitir declarações LOCAL corretas
+ * 1. Primeiro passo: Coleta declarações de variáveis globais com ALLOCA_MEM_VAR/VET
+ * 2. Segundo passo: Gera código com explicit load/store operations
+ * 3. Usa sistema de registradores temporários e buffer para declarações corretas
+ * 4. Todas operações com variáveis usam LOAD_VAR/STORE_VAR explícitas
  */
 
 #include "globals.h"
@@ -26,6 +31,20 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
+
+// Forward declarations for fundamental IR functions
+static void init_temp_pool(void);
+static char* allocate_temp_register(void);
+static void release_temp_register(const char *temp_name);
+static void release_scope_temp_registers(void);
+static void emit_buffered(const char *instruction_format, ...);
+static void generate_alloca_mem_var(const char *scope, const char *var_name);
+static void generate_alloca_mem_vet(const char *scope, const char *var_name, int size);
+static char* generate_load_var(const char *scope, const char *var_name);
+static char* generate_load_vet(const char *base_reg, const char *index_reg);
+static void generate_store_var(const char *temp_reg, const char *var_name, const char *scope);
+static void generate_store_vet(const char *temp_reg, const char *addr_reg);
+static void generate_move(const char *src_reg, const char *dst_reg);
 
 // Tamanhos máximos de buffer para geração de função
 #define MAX_FUNC_INSTRUCTIONS 1024
@@ -304,6 +323,7 @@ static void add_variable_info(const char *name, IRType type, int is_param) {
     variable_count++;
 }
 
+// Global declarations for IR generation
 static FILE *outputFile;
 static int tempCount = 0;    // Contador para variáveis temporárias (reiniciado por função)
 static int labelCount = 0;   // Contador para rótulos (reiniciado por função)
@@ -318,6 +338,106 @@ typedef struct {
 
 static TemporaryReg temp_pool[MAX_TEMPORARIES];
 static int temp_pool_initialized = 0;
+
+// ============================================================================
+// FUNDAMENTAL IR OPERATION FUNCTIONS 
+// ============================================================================
+
+// Generate memory allocation for variables (allocaMemVar)
+static void generate_alloca_mem_var(const char *scope, const char *var_name) {
+    if (outputFile) {
+        fprintf(outputFile, "allocaMemVar %s %s ___\n", scope, var_name);
+    }
+}
+
+// Generate memory allocation for arrays (allocaMemVet)
+static void generate_alloca_mem_vet(const char *scope, const char *var_name, int size) {
+    if (outputFile) {
+        fprintf(outputFile, "allocaMemVet %s %s %d\n", scope, var_name, size);
+    }
+}
+
+// Generate load variable from memory to temporary register (loadVar)
+static char* generate_load_var(const char *scope, const char *var_name) {
+    char *temp_reg = allocate_temp_register();
+    emit_buffered("loadVar %s %s %s", scope, var_name, temp_reg);
+    return temp_reg;
+}
+
+// Generate load array element to temporary register (loadVet)
+static char* generate_load_vet(const char *base_reg, const char *index_reg) {
+    char *temp_reg = allocate_temp_register();
+    emit_buffered("loadVet %s %s ___", base_reg, temp_reg);
+    return temp_reg;
+}
+
+// Generate store temporary register to variable memory (storeVar)
+static void generate_store_var(const char *temp_reg, const char *var_name, const char *scope) {
+    emit_buffered("storeVar %s %s %s", temp_reg, var_name, scope);
+}
+
+// Generate store temporary register to array element (storeVet)
+static void generate_store_vet(const char *temp_reg, const char *addr_reg) {
+    emit_buffered("storeVet %s %s ___", temp_reg, addr_reg);
+}
+
+// Generate move operation between temporary registers
+static void generate_move(const char *src_reg, const char *dst_reg) {
+    emit_buffered("move %s %s ___", src_reg, dst_reg);
+}
+
+// ============================================================================
+// ENHANCED TEMPORARY REGISTER MANAGEMENT
+// ============================================================================
+
+// Initialize temporary register pool
+static void init_temp_pool(void) {
+    if (temp_pool_initialized) return;
+    
+    for (int i = 0; i < MAX_TEMPORARIES; i++) {
+        snprintf(temp_pool[i].name, sizeof(temp_pool[i].name), "t%d", i);
+        temp_pool[i].in_use = 0;
+        temp_pool[i].scope_level = 0;
+    }
+    temp_pool_initialized = 1;
+}
+
+// Allocate a temporary register
+static char* allocate_temp_register(void) {
+    init_temp_pool();
+    
+    for (int i = 0; i < MAX_TEMPORARIES; i++) {
+        if (!temp_pool[i].in_use) {
+            temp_pool[i].in_use = 1;
+            temp_pool[i].scope_level = current_scope_level;
+            return copyString(temp_pool[i].name);
+        }
+    }
+    
+    fprintf(stderr, "Error: No free temporary registers available\n");
+    return copyString("t0"); // Fallback
+}
+
+// Release a temporary register
+static void release_temp_register(const char *temp_name) {
+    if (!temp_name || temp_name[0] != 't') return;
+    
+    int temp_num = atoi(&temp_name[1]);
+    if (temp_num >= 0 && temp_num < MAX_TEMPORARIES) {
+        temp_pool[temp_num].in_use = 0;
+        temp_pool[temp_num].scope_level = 0;
+    }
+}
+
+// Release all temporary registers for current scope
+static void release_scope_temp_registers(void) {
+    for (int i = 0; i < MAX_TEMPORARIES; i++) {
+        if (temp_pool[i].scope_level == current_scope_level) {
+            temp_pool[i].in_use = 0;
+            temp_pool[i].scope_level = 0;
+        }
+    }
+}
 
 // Buffer para código de função - usado para coletar todas as instruções de uma função
 // antes de escrever no arquivo, permitindo gerar declarações LOCAL corretas
@@ -347,8 +467,22 @@ static void generate_statement_code(TreeNode *tree);
 static const char *get_ir_op_string(TokenType op);
 static const char *get_ir_branch_instruction(TokenType op, int branch_on_true);
 
-// Novas funções para sistema aprimorado de temporários
+// Fundamental IR operation functions
+static void generate_alloca_mem_var(const char *scope, const char *var_name);
+static void generate_alloca_mem_vet(const char *scope, const char *var_name, int size);
+static char* generate_load_var(const char *scope, const char *var_name);
+static char* generate_load_vet(const char *base_reg, const char *index_reg);
+static void generate_store_var(const char *temp_reg, const char *var_name, const char *scope);
+static void generate_store_vet(const char *temp_reg, const char *addr_reg);
+static void generate_move(const char *src_reg, const char *dst_reg);
+
+// Enhanced temporary register management
 static void init_temp_pool(void);
+static char* allocate_temp_register(void);
+static void release_temp_register(const char *temp_name);
+static void release_scope_temp_registers(void);
+
+// Novas funções para sistema aprimorado de temporários
 static char *allocate_temp(void);
 static void release_temp(const char *temp_name);
 static void release_all_temps(void);
@@ -579,33 +713,30 @@ static void emit_global_decl(const char *name, int size) {
 }
 
 // Esta função é chamada quando o escopo de uma função termina.
-// Escreve as instruções em buffer para o arquivo de saída no formato correto:
+// Escreve as instruções em buffer para o arquivo de saída no formato fundamental:
 static void flush_function_buffer() {
-    char param_count_str[16];
-    snprintf(param_count_str, sizeof(param_count_str), "%d", param_count);
-    fprintf(outputFile, "FUNC_BEGIN %s, %s, __, __\n", current_func_name_codegen, param_count_str);
-    
-    // Generate parameter declarations with enhanced tracking
-    for (int i = 0; i < param_count; ++i) {
-        fprintf(outputFile, "  PARAM %s, __, __, __\n", param_list[i]);
-        // Add parameter to enhanced tracking
-        allocate_variable_enhanced(param_list[i], TYPE_INT, 1);
+    // Generate memory allocation for function parameters FIRST
+    if (outputFile) {
+        for (int i = 0; i < param_count; i++) {
+            fprintf(outputFile, "allocaMemVar %s %s ___\n", current_func_name_codegen, param_list[i]);
+        }
     }
-
-    // Generate LOCAL declarations for enhanced allocated registers
-    for (int i = 0; i < local_vars_count; ++i) {
-        fprintf(outputFile, "  LOCAL %s, __, __, __\n", local_vars_list[i]);
-        // Add local variable to enhanced tracking
-        allocate_variable_enhanced(local_vars_list[i], TYPE_INT, 0);
+    
+    // Generate function start
+    if (outputFile) {
+        fprintf(outputFile, "funInicio %s ___ ___\n", current_func_name_codegen);
     }
 
     // Write all function instructions
     for (int i = 0; i < instruction_buffer_count; ++i) {
-        fprintf(outputFile, "  %s\n", instruction_buffer[i]);
+        fprintf(outputFile, "%s\n", instruction_buffer[i]);
         free(instruction_buffer[i]);
     }
     
-    fprintf(outputFile, "END_FUNC %s, __, __, __\n\n", current_func_name_codegen);
+    // Generate function end
+    if (outputFile) {
+        fprintf(outputFile, "funFim %s ___ ___\n\n", current_func_name_codegen);
+    }
 
     // Reinicia buffers para a próxima função
     instruction_buffer_count = 0;
@@ -645,85 +776,126 @@ static const char *get_ir_branch_instruction(TokenType op, int branch_on_true) {
 }
 
 
-// Gera código IR para expressões e retorna o nome da variável/literal que contém o resultado
+// Gera código IR para expressões usando operações fundamentais load/store
 // Esta função processa recursivamente a árvore de expressões e produz o código IR necessário
-// para calcular o valor da expressão, retornando a variável que contém o resultado final
+// com operações explícitas de load/store seguindo o padrão do compilador de referência
 char *generate_expression_code(TreeNode *tree) {
     if (tree == NULL) return NULL;
 
-    char *result_var = NULL;
-    char *left_operand, *right_operand, *index_expr;
+    char *result_temp = NULL;
+    char *left_temp, *right_temp, *index_temp, *base_temp, *addr_temp;
 
     switch (tree->nodekind) {
         case ExpK:
             switch (tree->kind.exp) {
                 case ConstK: // Constante literal (número)
-                    result_var = (char *)malloc(32);
-                    snprintf(result_var, 32, "%d", tree->attr.val);
-                    return result_var; // Literais são usados diretamente
+                    // Constants are used directly in operations
+                    result_temp = (char *)malloc(32);
+                    snprintf(result_temp, 32, "%d", tree->attr.val);
+                    return result_temp;
 
                 case IdK://Vai pra VarK
                 case VarK:
-                    if (tree->child[0] != NULL) { // Acesso a array: var[índice]
-                        index_expr = generate_expression_code(tree->child[0]);
-                        result_var = allocate_register_for_expression(tree, TYPE_INT);
-                        generate_enhanced_quad("LOAD_ARRAY", tree->attr.name, index_expr, result_var, TYPE_INT);
-                    } else { // Variável simples
-                        // Always return the variable name directly for proper tracking
-                        // The assembler will handle register allocation
-                        result_var = copyString(tree->attr.name);
+                    if (tree->child[0] != NULL) { // Array access: var[index]
+                        // Generate code for array index
+                        index_temp = generate_expression_code(tree->child[0]);
+                        
+                        // Load array base address to temporary register
+                        base_temp = generate_load_var(current_func_name_codegen, tree->attr.name);
+                        
+                        // Calculate final address: base + index
+                        addr_temp = allocate_temp_register();
+                        if (outputFile) {
+                            fprintf(outputFile, "add %s %s %s\n", base_temp, index_temp, addr_temp);
+                        }
+                        
+                        // Load value from calculated address
+                        result_temp = generate_load_vet(addr_temp, NULL);
+                        
+                        // Release temporary registers
+                        release_temp_register(base_temp);
+                        release_temp_register(addr_temp);
+                        if (index_temp[0] == 't') release_temp_register(index_temp);
+                        
+                        return result_temp;
+                    } else { // Simple variable access
+                        // Load variable from memory to temporary register
+                        result_temp = generate_load_var(current_func_name_codegen, tree->attr.name);
+                        return result_temp;
                     }
-                    return result_var;
 
-                case OpK: // Operação aritmética ou de comparação
-                    left_operand = generate_expression_code(tree->child[0]);
-                    right_operand = generate_expression_code(tree->child[1]);
+                case OpK: // Arithmetic or comparison operation
+                    left_temp = generate_expression_code(tree->child[0]);
+                    right_temp = generate_expression_code(tree->child[1]);
                     
-                    // Use enhanced register allocation
-                    result_var = allocate_register_for_expression(tree, TYPE_INT);
-                    const char *op_str = get_ir_op_string(tree->attr.opr);
-                    if (strcmp(op_str, "OP_UNKNOWN") != 0) { // Aritmética
-                        // Use enhanced quadruple generation with type information
-                        generate_enhanced_quad(op_str, left_operand, right_operand, result_var, TYPE_INT);
-                    } else {
-                        fprintf(stderr, "Erro: Operador de comparação usado em contexto de expressão aritmética.\n");
-                        // Fallback: trata como movimento simples se deve produzir algo
-                        generate_enhanced_quad("MOV", left_operand, "__", result_var, TYPE_INT); // Enhanced fallback
+                    // Allocate temporary register for result
+                    result_temp = allocate_temp_register();
+                    
+                    // Generate operation based on operator type
+                    const char *op_str = NULL;
+                    switch (tree->attr.opr) {
+                        case MAIS: op_str = "add"; break;
+                        case SUB:  op_str = "sub"; break;
+                        case MULT: op_str = "mult"; break;
+                        case DIV:  op_str = "divisao"; break;
+                        case IGDAD:  op_str = "set"; break;
+                        case DIFER:  op_str = "sdt"; break;
+                        case MAIIG: op_str = "sget"; break;
+                        case MENIG: op_str = "slet"; break;
+                        case MAIOR:  op_str = "sgt"; break;
+                        case MENOR:  op_str = "slt"; break;
+                        default:
+                            fprintf(stderr, "Erro: Operador desconhecido\n");
+                            op_str = "add"; // fallback
+                            break;
                     }
-                    return result_var;
+                    
+                    if (outputFile) {
+                        emit_buffered("%s %s %s %s", op_str, left_temp, right_temp, result_temp);
+                    }
+                    
+                    // Release operand temporary registers if they are temporaries
+                    if (left_temp[0] == 't') release_temp_register(left_temp);
+                    if (right_temp[0] == 't') release_temp_register(right_temp);
+                    
+                    return result_temp;
 
-                case CallK: // Chamada de função
+                case CallK: // Function call
                     {
                         int arg_count = 0;
                         TreeNode *arg_node = tree->child[0];
-                        char *arg_vars[MAX_FUNC_PARAMS]; // Argumentos máximos
 
-                        // Gera código para argumentos primeiro e armazena nomes das variáveis/literais resultantes
-                        while(arg_node != NULL && arg_count < MAX_FUNC_PARAMS) {
-                            arg_vars[arg_count++] = generate_expression_code(arg_node);
+                        // Generate parameter setup
+                        while(arg_node != NULL) {
+                            char *arg_temp = generate_expression_code(arg_node);
+                            
+                            // Generate param instruction
+                            if (outputFile) {
+                                emit_buffered("param %s ___ ___", arg_temp);
+                            }
+                            
+                            if (arg_temp[0] == 't') release_temp_register(arg_temp);
+                            arg_count++;
                             arg_node = arg_node->sibling;
                         }
 
-                        // Emite instruções ARG com enhanced generation
-                        for (int i = 0; i < arg_count; ++i) {
-                            generate_enhanced_quad("ARG", arg_vars[i], "__", "__", TYPE_UNKNOWN);
+                        // Generate call instruction
+                        if (outputFile) {
+                            emit_buffered("call %s %d ___", tree->attr.name, arg_count);
                         }
 
-                        // Determina se a função retorna um valor.
-                        // funções void são 'output', 'sort'.
-                        // Outras retornam um valor.
-                        int is_void_call = (strcmp(tree->attr.name, "output") == 0 || strcmp(tree->attr.name, "sort") == 0);
-
-                        char arg_count_str[16];
-                        snprintf(arg_count_str, sizeof(arg_count_str), "%d", arg_count);
-                        generate_enhanced_quad("CALL", tree->attr.name, arg_count_str, "__", is_void_call ? TYPE_VOID : TYPE_INT);
-
+                        // Check if function returns a value
+                        int is_void_call = (strcmp(tree->attr.name, "output") == 0);
+                        
                         if (!is_void_call) {
-                            result_var = allocate_register_for_expression(tree, TYPE_INT);
-                            generate_enhanced_quad("STORE_RET", "__", "__", result_var, TYPE_INT);
-                            return result_var;
+                            // Function returns a value - get it from $rf
+                            result_temp = allocate_temp_register();
+                            if (outputFile) {
+                                emit_buffered("move $rf %s ___", result_temp);
+                            }
+                            return result_temp;
                         } else {
-                            return NULL; // Chamada void não produz variável resultado
+                            return NULL; // Void function call
                         }
                     }
                 default:
@@ -738,130 +910,222 @@ char *generate_expression_code(TreeNode *tree) {
 }
 
 
-// Gera código IR para comandos (statements)
+// Gera código IR para comandos usando operações fundamentais load/store
 // Processa diferentes tipos de comandos como atribuições, ifs, whiles, returns
-// e emite as instruções IR apropriadas para cada um
+// com operações explícitas de load/store seguindo o padrão do compilador de referência
 static void generate_statement_code(TreeNode *tree) {
     if (tree == NULL) return;
 
-    char *val_expr, *idx_expr, *lhs_var, *rhs_var;
-    char *label1, *label2, *label_end;
+    char *val_temp, *idx_temp, *base_temp, *addr_temp, *cond_temp;
+    char *label1, *label2;
 
     switch (tree->nodekind) {
         case StmtK:
             switch (tree->kind.stmt) {
-                case AssignK: // Comando de atribuição: var = expr ou var[idx] = expr
-                    rhs_var = generate_expression_code(tree->child[1]);
-                    if (tree->child[0]->kind.exp == IdK && tree->child[0]->child[0] != NULL) { // Atribuição a array: var[idx] = val
-                        idx_expr = generate_expression_code(tree->child[0]->child[0]);
-                        generate_enhanced_quad("STORE_ARRAY", tree->child[0]->attr.name, idx_expr, rhs_var, TYPE_ARRAY_INT);
-                    } else { // Atribuição simples: var = val
-                        // LHS pode ser IdK ou VarK baseado no parser original
-                        if (tree->child[0]->nodekind == ExpK && (tree->child[0]->kind.exp == IdK || tree->child[0]->kind.exp == VarK)) {
-                            lhs_var = tree->child[0]->attr.name;
-                            // Use enhanced variable allocation
-                            allocate_variable_enhanced(lhs_var, TYPE_INT, 0);
-                            generate_enhanced_quad("MOV", rhs_var, "__", lhs_var, TYPE_INT);
+                case AssignK: // Assignment: var = expr or var[idx] = expr
+                    val_temp = generate_expression_code(tree->child[1]); // RHS expression
+                    
+                    if (tree->child[0]->kind.exp == IdK && tree->child[0]->child[0] != NULL) { 
+                        // Array assignment: var[idx] = val
+                        idx_temp = generate_expression_code(tree->child[0]->child[0]);
+                        
+                        // Load array base address
+                        base_temp = generate_load_var(current_func_name_codegen, tree->child[0]->attr.name);
+                        
+                        // Calculate final address: base + index
+                        addr_temp = allocate_temp_register();
+                        if (outputFile) {
+                            emit_buffered("add %s %s %s", base_temp, idx_temp, addr_temp);
+                        }
+                        
+                        // Store value to calculated address
+                        generate_store_vet(val_temp, addr_temp);
+                        
+                        // Release temporary registers
+                        release_temp_register(base_temp);
+                        release_temp_register(addr_temp);
+                        if (idx_temp[0] == 't') release_temp_register(idx_temp);
+                        
+                    } else { 
+                        // Simple variable assignment: var = val
+                        if (tree->child[0]->nodekind == ExpK && 
+                            (tree->child[0]->kind.exp == IdK || tree->child[0]->kind.exp == VarK)) {
+                            
+                            // Store value to variable
+                            generate_store_var(val_temp, tree->child[0]->attr.name, current_func_name_codegen);
                         } else {
                             fprintf(stderr, "Erro: LHS da atribuição não é um tipo de variável reconhecido.\n");
                         }
                     }
+                    
+                    // Release RHS temporary if it's a temporary
+                    if (val_temp && val_temp[0] == 't') release_temp_register(val_temp);
                     break;
 
-                case IfK: // Comando condicional if-then-else
-                    label1 = newLabel(); // Rótulo para parte else ou fim do if
-                    // Geração da condição (OpK assumido para condições C-minus)
+                case IfK: // Conditional if-then-else
+                    label1 = newLabel(); // Label for else part or end of if
+                    
+                    // Generate condition evaluation
                     if (tree->child[0]->kind.exp == OpK) {
-                        char *op1 = generate_expression_code(tree->child[0]->child[0]);
-                        char *op2 = generate_expression_code(tree->child[0]->child[1]);
-                        emit_quad("CMP", op1, op2, NULL);
-
-                        // Salta se condição é FALSA para label1
-                        const char *branch_instr = get_ir_branch_instruction(tree->child[0]->attr.opr, 0); // salta em falso
-                        emit_quad(branch_instr, label1, NULL, NULL);
-                    } else { // Condição de variável booleana simples (não típico em C-minus)
-                        char *cond_var = generate_expression_code(tree->child[0]);
-                        emit_quad("CMP", cond_var, "0", NULL); // Assumindo 0 é falso
-                        emit_quad("BR_EQ", label1, NULL, NULL); // Salta se cond_var é falso (0)
+                        // Comparison operation - generate comparison and conditional jump
+                        char *op1_temp = generate_expression_code(tree->child[0]->child[0]);
+                        char *op2_temp = generate_expression_code(tree->child[0]->child[1]);
+                        
+                        // Generate comparison operation that sets result register
+                        cond_temp = allocate_temp_register();
+                        const char *op_str = NULL;
+                        switch (tree->child[0]->attr.opr) {
+                            case IGDAD: op_str = "set"; break;
+                            case DIFER: op_str = "sdt"; break;
+                            case MAIIG: op_str = "sget"; break;
+                            case MENIG: op_str = "slet"; break;
+                            case MAIOR: op_str = "sgt"; break;
+                            case MENOR: op_str = "slt"; break;
+                            default:
+                                fprintf(stderr, "Erro: Operador de comparação desconhecido\n");
+                                op_str = "set";
+                                break;
+                        }
+                        
+                        if (outputFile) {
+                            emit_buffered("%s %s %s %s", op_str, op1_temp, op2_temp, cond_temp);
+                        }
+                        
+                        // Jump if false (result is 0) - use bne (branch not equal)
+                        if (outputFile) {
+                            emit_buffered("bne %s %s ___", cond_temp, label1);
+                        }
+                        
+                        // Release comparison operands
+                        if (op1_temp[0] == 't') release_temp_register(op1_temp);
+                        if (op2_temp[0] == 't') release_temp_register(op2_temp);
+                        release_temp_register(cond_temp);
+                        
+                    } else { 
+                        // Simple condition variable
+                        cond_temp = generate_expression_code(tree->child[0]);
+                        if (outputFile) {
+                            emit_buffered("bne %s %s ___", cond_temp, label1);
+                        }
+                        if (cond_temp[0] == 't') release_temp_register(cond_temp);
                     }
 
-                    // Generate the THEN block (tree->child[1])
+                    // Generate THEN block
                     TreeNode *then_stmt = tree->child[1];
                     while (then_stmt != NULL) {
                         generate_code_single(then_stmt);
                         then_stmt = then_stmt->sibling;
                     }
 
-                    if (tree->child[2] != NULL) { // Parte else existe
-                        label2 = newLabel(); // Rótulo para fim do if-else
-                        emit_quad("GOTO", label2, NULL, NULL);
-                        emit_label(label1); // Rótulo para else
-                        // Processa todos os comandos na parte else
+                    if (tree->child[2] != NULL) { // ELSE part exists
+                        label2 = newLabel(); // Label for end of if-else
+                        if (outputFile) {
+                            emit_buffered("jump %s ___ ___", label2);
+                            emit_buffered("label_op %s ___ ___", label1);
+                        }
+                        
+                        // Generate ELSE block
                         TreeNode *else_stmt = tree->child[2];
                         while (else_stmt != NULL) {
                             generate_code_single(else_stmt);
                             else_stmt = else_stmt->sibling;
                         }
-                        emit_label(label2); // Rótulo para fim do if-else
-                        free(label2);
-                    } else { // Não há parte else
-                        emit_label(label1); // Rótulo para fim do if
+                        
+                        if (outputFile) {
+                            emit_buffered("label_op %s ___ ___", label2);
+                        }
+                    } else {
+                        // No else part - just place the label
+                        if (outputFile) {
+                            emit_buffered("label_op %s ___ ___", label1);
+                        }
                     }
-                    free(label1);
                     break;
 
-                case WhileK: // Comando while
-                    label1 = newLabel(); // verificação da condição
-                    label2 = newLabel(); // fim do loop
+                case WhileK: // While loop
+                    label1 = newLabel(); // Loop start label
+                    label2 = newLabel(); // Loop end label
                     
-                    emit_label(label1); // Condição do while
-                    // Geração da condição
+                    // Loop start label
+                    if (outputFile) {
+                        emit_buffered("label_op %s ___ ___", label1);
+                    }
+                    
+                    // Generate condition evaluation (similar to IF)
                     if (tree->child[0]->kind.exp == OpK) {
-                        char *op1 = generate_expression_code(tree->child[0]->child[0]);
-                        char *op2 = generate_expression_code(tree->child[0]->child[1]);
-                        emit_quad("CMP", op1, op2, NULL);
-
-                        // Salta se condição é FALSA para label2 (fim do loop)
-                        const char *branch_instr = get_ir_branch_instruction(tree->child[0]->attr.opr, 0); // salta em falso
-                        emit_quad(branch_instr, label2, NULL, NULL);
+                        char *op1_temp = generate_expression_code(tree->child[0]->child[0]);
+                        char *op2_temp = generate_expression_code(tree->child[0]->child[1]);
+                        
+                        cond_temp = allocate_temp_register();
+                        const char *op_str = NULL;
+                        switch (tree->child[0]->attr.opr) {
+                            case IGDAD: op_str = "set"; break;
+                            case DIFER: op_str = "sdt"; break;
+                            case MAIIG: op_str = "sget"; break;
+                            case MENIG: op_str = "slet"; break;
+                            case MAIOR: op_str = "sgt"; break;
+                            case MENOR: op_str = "slt"; break;
+                            default: op_str = "set"; break;
+                        }
+                        
+                        if (outputFile) {
+                            emit_buffered("%s %s %s %s", op_str, op1_temp, op2_temp, cond_temp);
+                            emit_buffered("bne %s %s ___", cond_temp, label2);
+                        }
+                        
+                        if (op1_temp[0] == 't') release_temp_register(op1_temp);
+                        if (op2_temp[0] == 't') release_temp_register(op2_temp);
+                        release_temp_register(cond_temp);
+                        
                     } else {
-                         char *cond_var = generate_expression_code(tree->child[0]);
-                         emit_quad("CMP", cond_var, "0", NULL); // Assumindo 0 é falso para while
-                         emit_quad("BR_EQ", label2, NULL, NULL); // Salta se cond_var é falso (0)
+                        cond_temp = generate_expression_code(tree->child[0]);
+                        if (outputFile) {
+                            emit_buffered("bne %s %s ___", cond_temp, label2);
+                        }
+                        if (cond_temp[0] == 't') release_temp_register(cond_temp);
                     }
 
-                    // Processa todos os comandos no corpo do loop
-                    TreeNode *loop_stmt = tree->child[1];
-                    while (loop_stmt != NULL) {
-                        generate_code_single(loop_stmt);
-                        loop_stmt = loop_stmt->sibling;
+                    // Generate loop body
+                    TreeNode *body_stmt = tree->child[1];
+                    while (body_stmt != NULL) {
+                        generate_code_single(body_stmt);
+                        body_stmt = body_stmt->sibling;
                     }
-                    emit_quad("GOTO", label1, NULL, NULL); // Volta para verificação da condição
-                    emit_label(label2); // Rótulo para fim do loop
-                    free(label1);
-                    free(label2);
+                    
+                    // Jump back to start
+                    if (outputFile) {
+                        emit_buffered("jump %s ___ ___", label1);
+                        emit_buffered("label_op %s ___ ___", label2);
+                    }
                     break;
 
-                case ReturnK: // Comando de retorno
+                case ReturnK: // Return statement
                     if (tree->child[0] != NULL) {
-                        val_expr = generate_expression_code(tree->child[0]);
-                        emit_quad("RETURN", val_expr, NULL, NULL);
-                    } else {
-                        emit_quad("RETURN_VOID", NULL, NULL, NULL);
+                        // Return with value
+                        val_temp = generate_expression_code(tree->child[0]);
+                        if (outputFile) {
+                            emit_buffered("move %s $rf ___", val_temp);
+                        }
+                        if (val_temp[0] == 't') release_temp_register(val_temp);
                     }
+                    // Return instruction handled by assembler
                     break;
-                
+
                 default:
-                    fprintf(stderr, "Erro: Tipo de comando desconhecido em generate_statement_code.\n");
+                    fprintf(stderr, "Erro: Tipo de comando desconhecido\n");
                     break;
             }
             break;
-        case ExpK: // Expressão standalone, ex. chamada de função não parte de uma atribuição
-            if (tree->kind.exp == CallK)
-                generate_expression_code(tree); // Irá emitir ARG, CALL
+            
+        case ExpK:
+            // Handle expression statements (like function calls)
+            if (tree->kind.exp == CallK) {
+                generate_expression_code(tree); // Will generate the call
+            }
             break;
+            
         default:
-            fprintf(stderr, "Erro: Nó não-comando/expressão em generate_statement_code.\n");
+            fprintf(stderr, "Erro: Tipo de nó desconhecido em generate_statement_code\n");
             break;
     }
 }
@@ -911,25 +1175,29 @@ static void generate_code_recursive(TreeNode *tree) {
 
 // Primeiro passo: coleta declarações de variáveis globais
 // Percorre a árvore sintática procurando por declarações de variáveis globais
-// e emite as instruções GLOBAL ou GLOBAL_ARRAY correspondentes
+// e emite as instruções fundamentais de alocação de memória
 void generateGlobalDeclarations(TreeNode *tree) {
     if (tree == NULL) return;
 
     if (tree->nodekind == ExpK && tree->kind.exp == TypeK) {
         TreeNode *actual_decl = tree->child[0];
         if (actual_decl != NULL && actual_decl->kind.exp == VarK) {
-            // Declaração de variável global
-            int size = 0; // 0 para variável simples, >0 para tamanho do array
-            if (actual_decl->child[0] != NULL && actual_decl->child[0]->kind.exp == ConstK) { // Array
+            // Global variable declaration
+            int size = 0; // 0 for simple variable, >0 for array size
+            if (actual_decl->child[0] != NULL && actual_decl->child[0]->kind.exp == ConstK) { 
+                // Array declaration
                 size = actual_decl->child[0]->attr.val;
+                generate_alloca_mem_vet("global", actual_decl->attr.name, size);
+            } else {
+                // Simple variable declaration
+                generate_alloca_mem_var("global", actual_decl->attr.name);
             }
-            addGlobalVar(copyString(actual_decl->attr.name), size); // Adiciona à lista interna
-            emit_global_decl(actual_decl->attr.name, size);         // Emite para arquivo
+            addGlobalVar(copyString(actual_decl->attr.name), size); // Add to internal list
         }
-        // Pula declarações de função neste passo
+        // Skip function declarations in this pass
     }
     
-    // Processa apenas siblings no nível superior (escopo global)
+    // Process only siblings at top level (global scope)
     generateGlobalDeclarations(tree->sibling);
 }
 
@@ -1009,7 +1277,7 @@ void codeGen(TreeNode *syntaxTree, char * irOutputFile, const char *sourceFilena
     
     printf("=== Enhanced C-minus Compiler IR Generation ===\n");
     printf("Register Pool: 64 registers (R0-R63)\n");
-    printf("Special Registers: R0(zero), R61(return), R62(frame), R63(stack)\n");
+    printf("Special Registers: R31(return), R62(lo), R63(hi)\n");
     printf("General Purpose: R1-R60 (60 registers available)\n");
     printf("Scope Management: Enabled\n");
     printf("Type System: Enhanced IR with type information\n");
@@ -1077,12 +1345,37 @@ void codeGen(TreeNode *syntaxTree, char * irOutputFile, const char *sourceFilena
                     param_node = param_node->sibling;
                 }
                 
-                // Gera corpo da função (comando composto)
+                // First pass: Process variable declarations and generate memory allocation
+                if (actual_decl->child[1] != NULL) {
+                    TreeNode *stmt = actual_decl->child[1];
+                    while (stmt != NULL) {
+                        // Process variable declarations
+                        if (stmt->nodekind == ExpK && stmt->kind.exp == TypeK && stmt->child[0] != NULL) {
+                            TreeNode *var_decl = stmt->child[0];
+                            if (var_decl->kind.exp == VarK) {
+                                // Simple variable declaration
+                                generate_alloca_mem_var(current_func_name_codegen, var_decl->attr.name);
+                                add_local_var(var_decl->attr.name);
+                            } else if (var_decl->kind.exp == IdK && var_decl->child[0] != NULL) {
+                                // Array declaration
+                                int array_size = -1;
+                                if (var_decl->child[0]->kind.exp == ConstK) {
+                                    array_size = var_decl->child[0]->attr.val;
+                                }
+                                generate_alloca_mem_vet(current_func_name_codegen, var_decl->attr.name, array_size);
+                                add_local_var(var_decl->attr.name);
+                            }
+                        }
+                        stmt = stmt->sibling;
+                    }
+                }
+                
+                // Second pass: Generate code for function body
                 // O corpo é actual_decl->child[1] e seus siblings
                 if (actual_decl->child[1] != NULL) {
                     TreeNode *stmt = actual_decl->child[1];
                     while (stmt != NULL) {
-                        // Pula declarações de variáveis locais (nós Type)
+                        // Skip variable declarations (already processed) and generate code for statements
                         if (!(stmt->nodekind == ExpK && stmt->kind.exp == TypeK && stmt->child[0] != NULL && stmt->child[0]->kind.exp == VarK)) {
                             generate_code_single(stmt); // Processa cada comando no corpo da função (sem siblings)
                         }
@@ -1164,18 +1457,6 @@ void generateIntermediateCode(TreeNode *syntaxTree) {
 // SISTEMA APRIMORADO DE GERENCIAMENTO DE TEMPORÁRIOS
 // Baseado nas melhorias identificadas nos outros compiladores
 // ============================================================================
-
-// Inicializa o pool de temporários
-static void init_temp_pool(void) {
-    if (!temp_pool_initialized) {
-        for (int i = 0; i < MAX_TEMPORARIES; i++) {
-            snprintf(temp_pool[i].name, sizeof(temp_pool[i].name), "t%d", i);
-            temp_pool[i].in_use = 0;
-            temp_pool[i].scope_level = 0;
-        }
-        temp_pool_initialized = 1;
-    }
-}
 
 // Aloca um temporário disponível
 static char *allocate_temp(void) {
