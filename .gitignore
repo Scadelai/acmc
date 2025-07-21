@@ -67,6 +67,9 @@ CompiladorWladimir/
 *.tmp
 *.bak
 *.md
+*.py
+*.pdf
+*.sh
 
 # Compiler executable
 acmc
@@ -76,3 +79,4 @@ test_generic.asm
 test_generic.ir
 assembly cheap_backup.c
 assembly copy_better.c
+sort.*

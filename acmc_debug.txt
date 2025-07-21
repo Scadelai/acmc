@@ -1,0 +1,426 @@
+=== LOG DE EXECUÇÃO DETALHADO - ACMC SIMULATOR ===
+Entradas programadas: [9, 6]
+============================================================
+
+CICLO   1: PC=30 | addi r30 r30 3                 | 
+    ADDI: R30 = R30(3) + 3 = 3 (was 0)
+    📊 Registradores: R28=0, R30=3, R31=0, R62=0, R63=0
+    📦 Memória: Vazia (todos zeros)
+
+CICLO   2: PC=31 | sw r31 r30 1                   | 
+    SW: MEM[R30+1=4] = R31(0)
+    📊 Registradores: R28=0, R30=3, R31=0, R62=0, R63=0
+    📦 Memória: Vazia (todos zeros)
+
+CICLO   3: PC=32 | input r28                      | 
+    INPUT[0]: R28 = 9 (was 0)
+    📊 Registradores: R28=9, R30=3, R31=0, R62=0, R63=0
+    📦 Memória: Vazia (todos zeros)
+
+CICLO   4: PC=33 | move r4 r28                    | 
+    MOVE: R4 = R28 = 9 (was 0)
+    📊 Registradores: R4=9, R28=9, R30=3, R31=0, R62=0, R63=0
+    📦 Memória: Vazia (todos zeros)
+
+CICLO   5: PC=34 | sw r4 r30 7                    | 
+    SW: MEM[R30+7=10] = R4(9)
+    📊 Registradores: R4=9, R28=9, R30=3, R31=0, R62=0, R63=0
+    📦 Memória: MEM[10]=9
+
+CICLO   6: PC=35 | input r28                      | 
+    INPUT[1]: R28 = 6 (was 9)
+    📊 Registradores: R4=9, R28=6, R30=3, R31=0, R62=0, R63=0
+    📦 Memória: MEM[10]=9
+
+CICLO   7: PC=36 | move r4 r28                    | 
+    MOVE: R4 = R28 = 6 (was 9)
+    📊 Registradores: R4=6, R28=6, R30=3, R31=0, R62=0, R63=0
+    📦 Memória: MEM[10]=9
+
+CICLO   8: PC=37 | sw r4 r30 8                    | 
+    SW: MEM[R30+8=11] = R4(6)
+    📊 Registradores: R4=6, R28=6, R30=3, R31=0, R62=0, R63=0
+    📦 Memória: MEM[10]=9, MEM[11]=6
+
+CICLO   9: PC=38 | lw r4 r30 7                    | 
+    LW: R4 = MEM[R30+7=10] = 9 (was 6)
+    📊 Registradores: R4=9, R28=6, R30=3, R31=0, R62=0, R63=0
+    📦 Memória: MEM[10]=9, MEM[11]=6
+
+CICLO  10: PC=39 | move r1 r4                     | 
+    MOVE: R1 = R4 = 9 (was 0)
+    📊 Registradores: R1=9, R4=9, R28=6, R30=3, R31=0, R62=0, R63=0
+    📦 Memória: MEM[10]=9, MEM[11]=6
+
+CICLO  11: PC=40 | lw r4 r30 8                    | 
+    LW: R4 = MEM[R30+8=11] = 6 (was 9)
+    📊 Registradores: R1=9, R4=6, R28=6, R30=3, R31=0, R62=0, R63=0
+    📦 Memória: MEM[10]=9, MEM[11]=6
+
+CICLO  12: PC=41 | move r2 r4                     | 
+    MOVE: R2 = R4 = 6 (was 0)
+    📊 Registradores: R1=9, R2=6, R4=6, R28=6, R30=3, R31=0, R62=0, R63=0
+    📦 Memória: MEM[10]=9, MEM[11]=6
+
+CICLO  13: PC=42 | jal gcd                        | 
+    JAL: RA(R31)=43, Jump para 0
+    📊 Registradores: R1=9, R2=6, R4=6, R28=6, R30=3, R31=43, R62=0, R63=0
+    📦 Memória: MEM[10]=9, MEM[11]=6
+
+CICLO  14: PC= 0 | NOP (Empty instruction slot)   | 
+CICLO  15: PC= 1 | addi r30 r30 6                 | 
+    ADDI: R30 = R30(9) + 6 = 9 (was 3)
+    📊 Registradores: R1=9, R2=6, R4=6, R28=6, R30=9, R31=43, R62=0, R63=0
+    📦 Memória: MEM[10]=9, MEM[11]=6
+
+CICLO  16: PC= 2 | sw r31 r30 1                   | 
+    SW: MEM[R30+1=10] = R31(43)
+    📊 Registradores: R1=9, R2=6, R4=6, R28=6, R30=9, R31=43, R62=0, R63=0
+    📦 Memória: MEM[10]=43, MEM[11]=6
+
+CICLO  17: PC= 3 | sw r1 r30 2                    | 
+    SW: MEM[R30+2=11] = R1(9)
+    📊 Registradores: R1=9, R2=6, R4=6, R28=6, R30=9, R31=43, R62=0, R63=0
+    📦 Memória: MEM[10]=43, MEM[11]=9
+
+CICLO  18: PC= 4 | sw r2 r30 3                    | 
+    SW: MEM[R30+3=12] = R2(6)
+    📊 Registradores: R1=9, R2=6, R4=6, R28=6, R30=9, R31=43, R62=0, R63=0
+    📦 Memória: MEM[10]=43, MEM[11]=9, MEM[12]=6
+
+CICLO  19: PC= 5 | lw r4 r30 3                    | 
+    LW: R4 = MEM[R30+3=12] = 6 (was 6)
+    📊 Registradores: R1=9, R2=6, R4=6, R28=6, R30=9, R31=43, R62=0, R63=0
+    📦 Memória: MEM[10]=43, MEM[11]=9, MEM[12]=6
+
+CICLO  20: PC= 6 | li r58 0                       | 
+    LI: R58 = 0 (was 0)
+    📊 Registradores: R1=9, R2=6, R4=6, R28=6, R30=9, R31=43, R62=0, R63=0
+    📦 Memória: MEM[10]=43, MEM[11]=9, MEM[12]=6
+
+CICLO  21: PC= 7 | set r5 r4 r58                  | 
+    SET: R5 = (R4(6) == R58(0)) = 0 (was 0)
+    📊 Registradores: R1=9, R2=6, R4=6, R28=6, R30=9, R31=43, R62=0, R63=0
+    📦 Memória: MEM[10]=43, MEM[11]=9, MEM[12]=6
+
+CICLO  22: PC= 8 | beq r5 r0 L0                   | 
+    BEQ: R5(0) == R0(0) -> Jump para 12
+    📊 Registradores: R1=9, R2=6, R4=6, R28=6, R30=9, R31=43, R62=0, R63=0
+    📦 Memória: MEM[10]=43, MEM[11]=9, MEM[12]=6
+
+CICLO  23: PC=12 | lw r4 r30 3                    | 
+    LW: R4 = MEM[R30+3=12] = 6 (was 6)
+    📊 Registradores: R1=9, R2=6, R4=6, R28=6, R30=9, R31=43, R62=0, R63=0
+    📦 Memória: MEM[10]=43, MEM[11]=9, MEM[12]=6
+
+CICLO  24: PC=13 | move r1 r4                     | 
+    MOVE: R1 = R4 = 6 (was 9)
+    📊 Registradores: R1=6, R2=6, R4=6, R28=6, R30=9, R31=43, R62=0, R63=0
+    📦 Memória: MEM[10]=43, MEM[11]=9, MEM[12]=6
+
+CICLO  25: PC=14 | lw r4 r30 2                    | 
+    LW: R4 = MEM[R30+2=11] = 9 (was 6)
+    📊 Registradores: R1=6, R2=6, R4=9, R28=6, R30=9, R31=43, R62=0, R63=0
+    📦 Memória: MEM[10]=43, MEM[11]=9, MEM[12]=6
+
+CICLO  26: PC=15 | lw r5 r30 2                    | 
+    LW: R5 = MEM[R30+2=11] = 9 (was 0)
+    📊 Registradores: R1=6, R2=6, R4=9, R5=9, R28=6, R30=9, R31=43, R62=0, R63=0
+    📦 Memória: MEM[10]=43, MEM[11]=9, MEM[12]=6
+
+CICLO  27: PC=16 | lw r6 r30 3                    | 
+    LW: R6 = MEM[R30+3=12] = 6 (was 0)
+    📊 Registradores: R1=6, R2=6, R4=9, R5=9, R6=6, R28=6, R30=9, R31=43, R62=0, R63=0
+    📦 Memória: MEM[10]=43, MEM[11]=9, MEM[12]=6
+
+CICLO  28: PC=17 | div r5 r6                      | 
+    DIV: R5(9) / R6(6) = Q:1(R62), R:3(R63)
+    📊 Registradores: R1=6, R2=6, R4=9, R5=9, R6=6, R28=6, R30=9, R31=43, R62=1, R63=3
+    📦 Memória: MEM[10]=43, MEM[11]=9, MEM[12]=6
+
+CICLO  29: PC=18 | mflo r7                        | 
+    MFLO: R7 = LO (R62) = 1 (was 0)
+    📊 Registradores: R1=6, R2=6, R4=9, R5=9, R6=6, R7=1, R28=6, R30=9, R31=43, R62=1, R63=3
+    📦 Memória: MEM[10]=43, MEM[11]=9, MEM[12]=6
+
+CICLO  30: PC=19 | lw r5 r30 3                    | 
+    LW: R5 = MEM[R30+3=12] = 6 (was 9)
+    📊 Registradores: R1=6, R2=6, R4=9, R5=6, R6=6, R7=1, R28=6, R30=9, R31=43, R62=1, R63=3
+    📦 Memória: MEM[10]=43, MEM[11]=9, MEM[12]=6
+
+CICLO  31: PC=20 | mult r7 r5                     | 
+    MULT: R7(1) * R5(6) = 6 (HI:R63=0, LO:R62=6)
+    📊 Registradores: R1=6, R2=6, R4=9, R5=6, R6=6, R7=1, R28=6, R30=9, R31=43, R62=6, R63=0
+    📦 Memória: MEM[10]=43, MEM[11]=9, MEM[12]=6
+
+CICLO  32: PC=21 | mflo r6                        | 
+    MFLO: R6 = LO (R62) = 6 (was 6)
+    📊 Registradores: R1=6, R2=6, R4=9, R5=6, R6=6, R7=1, R28=6, R30=9, R31=43, R62=6, R63=0
+    📦 Memória: MEM[10]=43, MEM[11]=9, MEM[12]=6
+
+CICLO  33: PC=22 | sub r5 r4 r6                   | 
+    SUB: R5 = R4(9) - R6(6) = 3 (was 6)
+    📊 Registradores: R1=6, R2=6, R4=9, R5=3, R6=6, R7=1, R28=6, R30=9, R31=43, R62=6, R63=0
+    📦 Memória: MEM[10]=43, MEM[11]=9, MEM[12]=6
+
+CICLO  34: PC=23 | move r2 r5                     | 
+    MOVE: R2 = R5 = 3 (was 6)
+    📊 Registradores: R1=6, R2=3, R4=9, R5=3, R6=6, R7=1, R28=6, R30=9, R31=43, R62=6, R63=0
+    📦 Memória: MEM[10]=43, MEM[11]=9, MEM[12]=6
+
+CICLO  35: PC=24 | jal gcd                        | 
+    JAL: RA(R31)=25, Jump para 0
+    📊 Registradores: R1=6, R2=3, R4=9, R5=3, R6=6, R7=1, R28=6, R30=9, R31=25, R62=6, R63=0
+    📦 Memória: MEM[10]=43, MEM[11]=9, MEM[12]=6
+
+CICLO  36: PC= 0 | NOP (Empty instruction slot)   | 
+CICLO  37: PC= 1 | addi r30 r30 6                 | 
+    ADDI: R30 = R30(15) + 6 = 15 (was 9)
+    📊 Registradores: R1=6, R2=3, R4=9, R5=3, R6=6, R7=1, R28=6, R30=15, R31=25, R62=6, R63=0
+    📦 Memória: MEM[10]=43, MEM[11]=9, MEM[12]=6
+
+CICLO  38: PC= 2 | sw r31 r30 1                   | 
+    SW: MEM[R30+1=16] = R31(25)
+    📊 Registradores: R1=6, R2=3, R4=9, R5=3, R6=6, R7=1, R28=6, R30=15, R31=25, R62=6, R63=0
+    📦 Memória: MEM[10]=43, MEM[11]=9, MEM[12]=6, MEM[16]=25
+
+CICLO  39: PC= 3 | sw r1 r30 2                    | 
+    SW: MEM[R30+2=17] = R1(6)
+    📊 Registradores: R1=6, R2=3, R4=9, R5=3, R6=6, R7=1, R28=6, R30=15, R31=25, R62=6, R63=0
+    📦 Memória: MEM[10]=43, MEM[11]=9, MEM[12]=6, MEM[16]=25, MEM[17]=6
+
+CICLO  40: PC= 4 | sw r2 r30 3                    | 
+    SW: MEM[R30+3=18] = R2(3)
+    📊 Registradores: R1=6, R2=3, R4=9, R5=3, R6=6, R7=1, R28=6, R30=15, R31=25, R62=6, R63=0
+    📦 Memória: MEM[10]=43, MEM[11]=9, MEM[12]=6, MEM[16]=25, MEM[17]=6, MEM[18]=3
+
+CICLO  41: PC= 5 | lw r4 r30 3                    | 
+    LW: R4 = MEM[R30+3=18] = 3 (was 9)
+    📊 Registradores: R1=6, R2=3, R4=3, R5=3, R6=6, R7=1, R28=6, R30=15, R31=25, R62=6, R63=0
+    📦 Memória: MEM[10]=43, MEM[11]=9, MEM[12]=6, MEM[16]=25, MEM[17]=6, MEM[18]=3
+
+CICLO  42: PC= 6 | li r58 0                       | 
+    LI: R58 = 0 (was 0)
+    📊 Registradores: R1=6, R2=3, R4=3, R5=3, R6=6, R7=1, R28=6, R30=15, R31=25, R62=6, R63=0
+    📦 Memória: MEM[10]=43, MEM[11]=9, MEM[12]=6, MEM[16]=25, MEM[17]=6, MEM[18]=3
+
+CICLO  43: PC= 7 | set r5 r4 r58                  | 
+    SET: R5 = (R4(3) == R58(0)) = 0 (was 3)
+    📊 Registradores: R1=6, R2=3, R4=3, R6=6, R7=1, R28=6, R30=15, R31=25, R62=6, R63=0
+    📦 Memória: MEM[10]=43, MEM[11]=9, MEM[12]=6, MEM[16]=25, MEM[17]=6, MEM[18]=3
+
+CICLO  44: PC= 8 | beq r5 r0 L0                   | 
+    BEQ: R5(0) == R0(0) -> Jump para 12
+    📊 Registradores: R1=6, R2=3, R4=3, R6=6, R7=1, R28=6, R30=15, R31=25, R62=6, R63=0
+    📦 Memória: MEM[10]=43, MEM[11]=9, MEM[12]=6, MEM[16]=25, MEM[17]=6, MEM[18]=3
+
+CICLO  45: PC=12 | lw r4 r30 3                    | 
+    LW: R4 = MEM[R30+3=18] = 3 (was 3)
+    📊 Registradores: R1=6, R2=3, R4=3, R6=6, R7=1, R28=6, R30=15, R31=25, R62=6, R63=0
+    📦 Memória: MEM[10]=43, MEM[11]=9, MEM[12]=6, MEM[16]=25, MEM[17]=6, MEM[18]=3
+
+CICLO  46: PC=13 | move r1 r4                     | 
+    MOVE: R1 = R4 = 3 (was 6)
+    📊 Registradores: R1=3, R2=3, R4=3, R6=6, R7=1, R28=6, R30=15, R31=25, R62=6, R63=0
+    📦 Memória: MEM[10]=43, MEM[11]=9, MEM[12]=6, MEM[16]=25, MEM[17]=6, MEM[18]=3
+
+CICLO  47: PC=14 | lw r4 r30 2                    | 
+    LW: R4 = MEM[R30+2=17] = 6 (was 3)
+    📊 Registradores: R1=3, R2=3, R4=6, R6=6, R7=1, R28=6, R30=15, R31=25, R62=6, R63=0
+    📦 Memória: MEM[10]=43, MEM[11]=9, MEM[12]=6, MEM[16]=25, MEM[17]=6, MEM[18]=3
+
+CICLO  48: PC=15 | lw r5 r30 2                    | 
+    LW: R5 = MEM[R30+2=17] = 6 (was 0)
+    📊 Registradores: R1=3, R2=3, R4=6, R5=6, R6=6, R7=1, R28=6, R30=15, R31=25, R62=6, R63=0
+    📦 Memória: MEM[10]=43, MEM[11]=9, MEM[12]=6, MEM[16]=25, MEM[17]=6, MEM[18]=3
+
+CICLO  49: PC=16 | lw r6 r30 3                    | 
+    LW: R6 = MEM[R30+3=18] = 3 (was 6)
+    📊 Registradores: R1=3, R2=3, R4=6, R5=6, R6=3, R7=1, R28=6, R30=15, R31=25, R62=6, R63=0
+    📦 Memória: MEM[10]=43, MEM[11]=9, MEM[12]=6, MEM[16]=25, MEM[17]=6, MEM[18]=3
+
+CICLO  50: PC=17 | div r5 r6                      | 
+    DIV: R5(6) / R6(3) = Q:2(R62), R:0(R63)
+    📊 Registradores: R1=3, R2=3, R4=6, R5=6, R6=3, R7=1, R28=6, R30=15, R31=25, R62=2, R63=0
+    📦 Memória: MEM[10]=43, MEM[11]=9, MEM[12]=6, MEM[16]=25, MEM[17]=6, MEM[18]=3
+
+CICLO  51: PC=18 | mflo r7                        | 
+    MFLO: R7 = LO (R62) = 2 (was 1)
+    📊 Registradores: R1=3, R2=3, R4=6, R5=6, R6=3, R7=2, R28=6, R30=15, R31=25, R62=2, R63=0
+    📦 Memória: MEM[10]=43, MEM[11]=9, MEM[12]=6, MEM[16]=25, MEM[17]=6, MEM[18]=3
+
+CICLO  52: PC=19 | lw r5 r30 3                    | 
+    LW: R5 = MEM[R30+3=18] = 3 (was 6)
+    📊 Registradores: R1=3, R2=3, R4=6, R5=3, R6=3, R7=2, R28=6, R30=15, R31=25, R62=2, R63=0
+    📦 Memória: MEM[10]=43, MEM[11]=9, MEM[12]=6, MEM[16]=25, MEM[17]=6, MEM[18]=3
+
+CICLO  53: PC=20 | mult r7 r5                     | 
+    MULT: R7(2) * R5(3) = 6 (HI:R63=0, LO:R62=6)
+    📊 Registradores: R1=3, R2=3, R4=6, R5=3, R6=3, R7=2, R28=6, R30=15, R31=25, R62=6, R63=0
+    📦 Memória: MEM[10]=43, MEM[11]=9, MEM[12]=6, MEM[16]=25, MEM[17]=6, MEM[18]=3
+
+CICLO  54: PC=21 | mflo r6                        | 
+    MFLO: R6 = LO (R62) = 6 (was 3)
+    📊 Registradores: R1=3, R2=3, R4=6, R5=3, R6=6, R7=2, R28=6, R30=15, R31=25, R62=6, R63=0
+    📦 Memória: MEM[10]=43, MEM[11]=9, MEM[12]=6, MEM[16]=25, MEM[17]=6, MEM[18]=3
+
+CICLO  55: PC=22 | sub r5 r4 r6                   | 
+    SUB: R5 = R4(6) - R6(6) = 0 (was 3)
+    📊 Registradores: R1=3, R2=3, R4=6, R6=6, R7=2, R28=6, R30=15, R31=25, R62=6, R63=0
+    📦 Memória: MEM[10]=43, MEM[11]=9, MEM[12]=6, MEM[16]=25, MEM[17]=6, MEM[18]=3
+
+CICLO  56: PC=23 | move r2 r5                     | 
+    MOVE: R2 = R5 = 0 (was 3)
+    📊 Registradores: R1=3, R4=6, R6=6, R7=2, R28=6, R30=15, R31=25, R62=6, R63=0
+    📦 Memória: MEM[10]=43, MEM[11]=9, MEM[12]=6, MEM[16]=25, MEM[17]=6, MEM[18]=3
+
+CICLO  57: PC=24 | jal gcd                        | 
+    JAL: RA(R31)=25, Jump para 0
+    📊 Registradores: R1=3, R4=6, R6=6, R7=2, R28=6, R30=15, R31=25, R62=6, R63=0
+    📦 Memória: MEM[10]=43, MEM[11]=9, MEM[12]=6, MEM[16]=25, MEM[17]=6, MEM[18]=3
+
+CICLO  58: PC= 0 | NOP (Empty instruction slot)   | 
+CICLO  59: PC= 1 | addi r30 r30 6                 | 
+    ADDI: R30 = R30(21) + 6 = 21 (was 15)
+    📊 Registradores: R1=3, R4=6, R6=6, R7=2, R28=6, R30=21, R31=25, R62=6, R63=0
+    📦 Memória: MEM[10]=43, MEM[11]=9, MEM[12]=6, MEM[16]=25, MEM[17]=6, MEM[18]=3
+
+CICLO  60: PC= 2 | sw r31 r30 1                   | 
+    SW: MEM[R30+1=22] = R31(25)
+    📊 Registradores: R1=3, R4=6, R6=6, R7=2, R28=6, R30=21, R31=25, R62=6, R63=0
+    📦 Memória: MEM[10]=43, MEM[11]=9, MEM[12]=6, MEM[16]=25, MEM[17]=6, MEM[18]=3, MEM[22]=25
+
+CICLO  61: PC= 3 | sw r1 r30 2                    | 
+    SW: MEM[R30+2=23] = R1(3)
+    📊 Registradores: R1=3, R4=6, R6=6, R7=2, R28=6, R30=21, R31=25, R62=6, R63=0
+    📦 Memória: MEM[10]=43, MEM[11]=9, MEM[12]=6, MEM[16]=25, MEM[17]=6, MEM[18]=3, MEM[22]=25, MEM[23]=3
+
+CICLO  62: PC= 4 | sw r2 r30 3                    | 
+    SW: MEM[R30+3=24] = R2(0)
+    📊 Registradores: R1=3, R4=6, R6=6, R7=2, R28=6, R30=21, R31=25, R62=6, R63=0
+    📦 Memória: MEM[10]=43, MEM[11]=9, MEM[12]=6, MEM[16]=25, MEM[17]=6, MEM[18]=3, MEM[22]=25, MEM[23]=3
+
+CICLO  63: PC= 5 | lw r4 r30 3                    | 
+    LW: R4 = MEM[R30+3=24] = 0 (was 6)
+    📊 Registradores: R1=3, R6=6, R7=2, R28=6, R30=21, R31=25, R62=6, R63=0
+    📦 Memória: MEM[10]=43, MEM[11]=9, MEM[12]=6, MEM[16]=25, MEM[17]=6, MEM[18]=3, MEM[22]=25, MEM[23]=3
+
+CICLO  64: PC= 6 | li r58 0                       | 
+    LI: R58 = 0 (was 0)
+    📊 Registradores: R1=3, R6=6, R7=2, R28=6, R30=21, R31=25, R62=6, R63=0
+    📦 Memória: MEM[10]=43, MEM[11]=9, MEM[12]=6, MEM[16]=25, MEM[17]=6, MEM[18]=3, MEM[22]=25, MEM[23]=3
+
+CICLO  65: PC= 7 | set r5 r4 r58                  | 
+    SET: R5 = (R4(0) == R58(0)) = 1 (was 0)
+    📊 Registradores: R1=3, R5=1, R6=6, R7=2, R28=6, R30=21, R31=25, R62=6, R63=0
+    📦 Memória: MEM[10]=43, MEM[11]=9, MEM[12]=6, MEM[16]=25, MEM[17]=6, MEM[18]=3, MEM[22]=25, MEM[23]=3
+
+CICLO  66: PC= 8 | beq r5 r0 L0                   | 
+    BEQ: R5(1) != R0(0) -> Continue
+    📊 Registradores: R1=3, R5=1, R6=6, R7=2, R28=6, R30=21, R31=25, R62=6, R63=0
+    📦 Memória: MEM[10]=43, MEM[11]=9, MEM[12]=6, MEM[16]=25, MEM[17]=6, MEM[18]=3, MEM[22]=25, MEM[23]=3
+
+CICLO  67: PC= 9 | lw r4 r30 2                    | 
+    LW: R4 = MEM[R30+2=23] = 3 (was 0)
+    📊 Registradores: R1=3, R4=3, R5=1, R6=6, R7=2, R28=6, R30=21, R31=25, R62=6, R63=0
+    📦 Memória: MEM[10]=43, MEM[11]=9, MEM[12]=6, MEM[16]=25, MEM[17]=6, MEM[18]=3, MEM[22]=25, MEM[23]=3
+
+CICLO  68: PC=10 | move r28 r4                    | 
+    MOVE: R28 = R4 = 3 (was 6)
+    📊 Registradores: R1=3, R4=3, R5=1, R6=6, R7=2, R28=3, R30=21, R31=25, R62=6, R63=0
+    📦 Memória: MEM[10]=43, MEM[11]=9, MEM[12]=6, MEM[16]=25, MEM[17]=6, MEM[18]=3, MEM[22]=25, MEM[23]=3
+
+CICLO  69: PC=11 | j L1                           | 
+    J: Jump para 27
+    📊 Registradores: R1=3, R4=3, R5=1, R6=6, R7=2, R28=3, R30=21, R31=25, R62=6, R63=0
+    📦 Memória: MEM[10]=43, MEM[11]=9, MEM[12]=6, MEM[16]=25, MEM[17]=6, MEM[18]=3, MEM[22]=25, MEM[23]=3
+
+CICLO  70: PC=27 | lw r31 r30 1                   | 
+    LW: R31 = MEM[R30+1=22] = 25 (was 25)
+    📊 Registradores: R1=3, R4=3, R5=1, R6=6, R7=2, R28=3, R30=21, R31=25, R62=6, R63=0
+    📦 Memória: MEM[10]=43, MEM[11]=9, MEM[12]=6, MEM[16]=25, MEM[17]=6, MEM[18]=3, MEM[22]=25, MEM[23]=3
+
+CICLO  71: PC=28 | subi r30 r30 6                 | 
+    SUBI: R30 = R30(15) - 6 = 15 (was 21)
+    📊 Registradores: R1=3, R4=3, R5=1, R6=6, R7=2, R28=3, R30=15, R31=25, R62=6, R63=0
+    📦 Memória: MEM[10]=43, MEM[11]=9, MEM[12]=6, MEM[16]=25, MEM[17]=6, MEM[18]=3, MEM[22]=25, MEM[23]=3
+
+CICLO  72: PC=29 | jr r31                         | 
+    JR: Jump para R31=25
+    📊 Registradores: R1=3, R4=3, R5=1, R6=6, R7=2, R28=3, R30=15, R31=25, R62=6, R63=0
+    📦 Memória: MEM[10]=43, MEM[11]=9, MEM[12]=6, MEM[16]=25, MEM[17]=6, MEM[18]=3, MEM[22]=25, MEM[23]=3
+
+CICLO  73: PC=25 | move r4 r28                    | 
+    MOVE: R4 = R28 = 3 (was 3)
+    📊 Registradores: R1=3, R4=3, R5=1, R6=6, R7=2, R28=3, R30=15, R31=25, R62=6, R63=0
+    📦 Memória: MEM[10]=43, MEM[11]=9, MEM[12]=6, MEM[16]=25, MEM[17]=6, MEM[18]=3, MEM[22]=25, MEM[23]=3
+
+CICLO  74: PC=26 | move r28 r4                    | 
+    MOVE: R28 = R4 = 3 (was 3)
+    📊 Registradores: R1=3, R4=3, R5=1, R6=6, R7=2, R28=3, R30=15, R31=25, R62=6, R63=0
+    📦 Memória: MEM[10]=43, MEM[11]=9, MEM[12]=6, MEM[16]=25, MEM[17]=6, MEM[18]=3, MEM[22]=25, MEM[23]=3
+
+CICLO  75: PC=27 | lw r31 r30 1                   | 
+    LW: R31 = MEM[R30+1=16] = 25 (was 25)
+    📊 Registradores: R1=3, R4=3, R5=1, R6=6, R7=2, R28=3, R30=15, R31=25, R62=6, R63=0
+    📦 Memória: MEM[10]=43, MEM[11]=9, MEM[12]=6, MEM[16]=25, MEM[17]=6, MEM[18]=3, MEM[22]=25, MEM[23]=3
+
+CICLO  76: PC=28 | subi r30 r30 6                 | 
+    SUBI: R30 = R30(9) - 6 = 9 (was 15)
+    📊 Registradores: R1=3, R4=3, R5=1, R6=6, R7=2, R28=3, R30=9, R31=25, R62=6, R63=0
+    📦 Memória: MEM[10]=43, MEM[11]=9, MEM[12]=6, MEM[16]=25, MEM[17]=6, MEM[18]=3, MEM[22]=25, MEM[23]=3
+
+CICLO  77: PC=29 | jr r31                         | 
+    JR: Jump para R31=25
+    📊 Registradores: R1=3, R4=3, R5=1, R6=6, R7=2, R28=3, R30=9, R31=25, R62=6, R63=0
+    📦 Memória: MEM[10]=43, MEM[11]=9, MEM[12]=6, MEM[16]=25, MEM[17]=6, MEM[18]=3, MEM[22]=25, MEM[23]=3
+
+CICLO  78: PC=25 | move r4 r28                    | 
+    MOVE: R4 = R28 = 3 (was 3)
+    📊 Registradores: R1=3, R4=3, R5=1, R6=6, R7=2, R28=3, R30=9, R31=25, R62=6, R63=0
+    📦 Memória: MEM[10]=43, MEM[11]=9, MEM[12]=6, MEM[16]=25, MEM[17]=6, MEM[18]=3, MEM[22]=25, MEM[23]=3
+
+CICLO  79: PC=26 | move r28 r4                    | 
+    MOVE: R28 = R4 = 3 (was 3)
+    📊 Registradores: R1=3, R4=3, R5=1, R6=6, R7=2, R28=3, R30=9, R31=25, R62=6, R63=0
+    📦 Memória: MEM[10]=43, MEM[11]=9, MEM[12]=6, MEM[16]=25, MEM[17]=6, MEM[18]=3, MEM[22]=25, MEM[23]=3
+
+CICLO  80: PC=27 | lw r31 r30 1                   | 
+    LW: R31 = MEM[R30+1=10] = 43 (was 25)
+    📊 Registradores: R1=3, R4=3, R5=1, R6=6, R7=2, R28=3, R30=9, R31=43, R62=6, R63=0
+    📦 Memória: MEM[10]=43, MEM[11]=9, MEM[12]=6, MEM[16]=25, MEM[17]=6, MEM[18]=3, MEM[22]=25, MEM[23]=3
+
+CICLO  81: PC=28 | subi r30 r30 6                 | 
+    SUBI: R30 = R30(3) - 6 = 3 (was 9)
+    📊 Registradores: R1=3, R4=3, R5=1, R6=6, R7=2, R28=3, R30=3, R31=43, R62=6, R63=0
+    📦 Memória: MEM[10]=43, MEM[11]=9, MEM[12]=6, MEM[16]=25, MEM[17]=6, MEM[18]=3, MEM[22]=25, MEM[23]=3
+
+CICLO  82: PC=29 | jr r31                         | 
+    JR: Jump para R31=43
+    📊 Registradores: R1=3, R4=3, R5=1, R6=6, R7=2, R28=3, R30=3, R31=43, R62=6, R63=0
+    📦 Memória: MEM[10]=43, MEM[11]=9, MEM[12]=6, MEM[16]=25, MEM[17]=6, MEM[18]=3, MEM[22]=25, MEM[23]=3
+
+CICLO  83: PC=43 | move r4 r28                    | 
+    MOVE: R4 = R28 = 3 (was 3)
+    📊 Registradores: R1=3, R4=3, R5=1, R6=6, R7=2, R28=3, R30=3, R31=43, R62=6, R63=0
+    📦 Memória: MEM[10]=43, MEM[11]=9, MEM[12]=6, MEM[16]=25, MEM[17]=6, MEM[18]=3, MEM[22]=25, MEM[23]=3
+
+CICLO  84: PC=44 | move r1 r4                     | 
+    MOVE: R1 = R4 = 3 (was 3)
+    📊 Registradores: R1=3, R4=3, R5=1, R6=6, R7=2, R28=3, R30=3, R31=43, R62=6, R63=0
+    📦 Memória: MEM[10]=43, MEM[11]=9, MEM[12]=6, MEM[16]=25, MEM[17]=6, MEM[18]=3, MEM[22]=25, MEM[23]=3
+
+CICLO  85: PC=45 | outputreg r1                   | 
+    OUTPUT: 3 (de R1)
+    📊 Registradores: R1=3, R4=3, R5=1, R6=6, R7=2, R28=3, R30=3, R31=43, R62=6, R63=0
+    📦 Memória: MEM[10]=43, MEM[11]=9, MEM[12]=6, MEM[16]=25, MEM[17]=6, MEM[18]=3, MEM[22]=25, MEM[23]=3
+
+CICLO  86: PC=46 | halt                           | 
+    HALT - Programa finalizado
+    📊 Registradores: R1=3, R4=3, R5=1, R6=6, R7=2, R28=3, R30=3, R31=43, R62=6, R63=0
+    📦 Memória: MEM[10]=43, MEM[11]=9, MEM[12]=6, MEM[16]=25, MEM[17]=6, MEM[18]=3, MEM[22]=25, MEM[23]=3
+
+
+=== FIM DA EXECUÇÃO ===
+Total de ciclos: 86
+Saídas: [3]

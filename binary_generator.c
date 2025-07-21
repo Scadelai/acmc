@@ -88,6 +88,7 @@ static ProcessorInstruction instructions[] = {
     {"outputreg",  0x20, FORMAT_R, "OUTPUTREG RS"},          // 100000
     {"outputreset",0x21, FORMAT_R, "OUTPUT RESET"},          // 100001
     {"input",      0x22, FORMAT_R, "INPUT RD"},              // 100010
+    {"set",        0x23, FORMAT_R, "SET RD, RS, RT"},        // 100011
 };
 
 #define NUM_INSTRUCTIONS (sizeof(instructions) / sizeof(instructions[0]))
@@ -114,16 +115,19 @@ int parseRegister(const char *reg_str) {
 
 // Parse immediate value or address
 int parseImmediate(const char *imm_str) {
+    printf("DEBUG: parseImmediate called for '%s'\n", imm_str);
     if (!imm_str) return 0;
     
     // Check if it's a label reference
     for (int i = 0; i < label_count; i++) {
         if (strcmp(labels[i].name, imm_str) == 0) {
+            printf("DEBUG: Found label '%s' at address %u\n", labels[i].name, labels[i].address);
             return labels[i].address;
         }
     }
     
     // Parse as number
+    printf("DEBUG: Label '%s' NOT FOUND. Attempting atoi. Result: %d\n", imm_str, atoi(imm_str));
     return atoi(imm_str);
 }
 
@@ -243,8 +247,8 @@ uint32_t parseInstruction(const char *line, uint32_t pc) {
             
             if (strcmp(instr->mnemonic, "add") == 0 || strcmp(instr->mnemonic, "sub") == 0 ||
                 strcmp(instr->mnemonic, "and") == 0 || strcmp(instr->mnemonic, "or") == 0 ||
-                strcmp(instr->mnemonic, "slt") == 0) {
-                // Format: ADD RD, RS, RT
+                strcmp(instr->mnemonic, "slt") == 0 || strcmp(instr->mnemonic, "set") == 0) {
+                // Format: ADD RD, RS, RT (including SET)
                 if (token_count >= 4) {
                     rd = parseRegister(tokens[1]);
                     rs = parseRegister(tokens[2]);
@@ -423,6 +427,7 @@ void collectLabels(FILE *asm_file) {
             while (*label_name == ' ' || *label_name == '\t') label_name++;
             
             strcpy(labels[label_count].name, label_name);
+            printf("DEBUG: Stored label '%s' at address %u\n", labels[label_count].name, labels[label_count].address);
             labels[label_count].address = pc + 1; // Points to next instruction after current pc
             label_count++;
         }
