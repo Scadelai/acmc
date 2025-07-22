@@ -20,6 +20,16 @@
 #include <ctype.h>
 #include <stdint.h>
 #include <stdarg.h>
+#include <stdbool.h>
+#define MAX_FUNC_VARS 64
+#define MAX_PENDING_ALLOCAS 64
+static struct {
+    char scope[64];
+    char name[64];
+} pending_allocas[MAX_PENDING_ALLOCAS];
+static int pending_alloca_count = 0;
+
+// Remove the typedef struct VarOffsetEntry definition, since it is now in assembly.h
 
 // Processor instruction information based on instrucoes_processador.md
 typedef struct {
@@ -77,6 +87,12 @@ void initializeContext(AssemblyContext *ctx, FILE *output) {
     ctx->label_counter = 0;
     ctx->param_counter = 0;  // Initialize parameter counter
     ctx->current_stack_slots = 0;  // Initialize stack slot counter
+    ctx->in_function = false;
+    ctx->var_offset_map_count = 0;
+    for (int i = 0; i < MAX_FUNC_VARS; i++) {
+        ctx->var_offsets[i].name[0] = '\0';
+        ctx->var_offsets[i].offset = -1;
+    }
     
     // Clear all register mappings
     for (int i = 0; i < 128; i++) {
@@ -257,6 +273,12 @@ int calculateRequiredStackSlots(AssemblyContext *ctx, const char *func_name) {
 // Reset register allocation for new function
 void resetFunctionContext(AssemblyContext *ctx, const char *func_name) {
     strcpy(ctx->current_function, func_name);
+    ctx->in_function = true;
+    ctx->var_offset_map_count = 0;
+    for (int i = 0; i < MAX_FUNC_VARS; i++) {
+        ctx->var_offsets[i].name[0] = '\0';
+        ctx->var_offsets[i].offset = -1;
+    }
     
     // Keep global variables, clear local ones
     for (int i = 0; i < 128; i++) {
@@ -272,13 +294,6 @@ void resetFunctionContext(AssemblyContext *ctx, const char *func_name) {
     
     ctx->next_temp_reg = 4;  // Reset temporary register allocation
     ctx->param_counter = 0;  // Reset parameter counter for new function
-    ctx->var_offset_map_count = 0;
-    for (int i = 0; i < 128; i++) {
-        ctx->current_function_vars[i].name[0] = '\0';
-        ctx->current_function_vars[i].memory_offset = -1;
-        ctx->current_function_vars[i].is_array = 0;
-        ctx->current_function_vars[i].array_size = 0;
-    }
 }
 
 // Check if string represents an immediate value
@@ -317,325 +332,454 @@ void emitFunctionLabel(AssemblyContext *ctx, const char *func_name) {
     resetFunctionContext(ctx, func_name);
 }
 
+static void trim(char *str) {
+    char *end;
+    while(isspace((unsigned char)*str)) str++;
+    if(*str == 0) return;
+    end = str + strlen(str) - 1;
+    while(end > str && isspace((unsigned char)*end)) end--;
+    *(end+1) = 0;
+}
+
 // Process IR instruction line - generic for any C- program
 void processIRLine(AssemblyContext *ctx, const char *line) {
+    printf("DEBUG: IR line received: '%s'\n", line);
     char op[64], arg1[64], arg2[64], arg3[64], arg4[64];
-    
-    // Skip empty lines and whitespace
-    if (!line || strlen(line) == 0 || line[0] == '\n') return;
-    while (*line == ' ' || *line == '\t') line++;
-    if (*line == '\0' || *line == '\n') return;
-    
-    // Parse IR instruction
-    int parsed = sscanf(line, "%s %s %s %s %s", op, arg1, arg2, arg3, arg4);
-    if (parsed < 1) return;
-    
-    // Remove commas from arguments
     char *comma;
-    if ((comma = strchr(arg1, ',')) != NULL) *comma = '\0';
-    if ((comma = strchr(arg2, ',')) != NULL) *comma = '\0';
-    if ((comma = strchr(arg3, ',')) != NULL) *comma = '\0';
-    if ((comma = strchr(arg4, ',')) != NULL) *comma = '\0';
-    
-    // Clear unused args
-    if (parsed < 2) arg1[0] = '\0';
-    if (parsed < 3) arg2[0] = '\0';
-    if (parsed < 4) arg3[0] = '\0';
-    if (parsed < 5) arg4[0] = '\0';
-    
-    // Process IR operations using processor instruction set
-    if (strcmp(op, "funInicio") == 0) {
-        fprintf(ctx->output, "Func %s:\n", arg1);
-        resetFunctionContext(ctx, arg1);
+    int parsed;
+    int reprocess = 0;
+    do {
+        reprocess = 0;
+        // Skip empty lines and whitespace
+        if (!line) return;
+        while (*line == ' ' || *line == '\t') line++;
+        if (*line == '\0' || *line == '\n') return;
+        if (line[0] == '#') return; // skip comments
+        if (strlen(line) == 0) return;
+        // Parse IR instruction
+        parsed = sscanf(line, "%s %s %s %s %s", op, arg1, arg2, arg3, arg4);
+        if (parsed < 1) return;
+        // Remove commas from arguments
+        if ((comma = strchr(arg1, ',')) != NULL) *comma = '\0';
+        if ((comma = strchr(arg2, ',')) != NULL) *comma = '\0';
+        if ((comma = strchr(arg3, ',')) != NULL) *comma = '\0';
+        if ((comma = strchr(arg4, ',')) != NULL) *comma = '\0';
+        // Clear unused args
+        if (parsed < 2) arg1[0] = '\0';
+        if (parsed < 3) arg2[0] = '\0';
+        if (parsed < 4) arg3[0] = '\0';
+        if (parsed < 5) arg4[0] = '\0';
         
-        int param_count_ir = atoi(arg2); // Read param count from IR
-        int stack_frame_size_ir = atoi(arg3); // Read total stack size from IR
-        ctx->current_stack_slots = stack_frame_size_ir; // Store for epilogue
+        // Process IR operations using processor instruction set
+        static char current_func_name[64] = "";
+        static int current_stack_size = 0;
+        static bool prologue_emitted = true;
+        static bool seen_real_instruction = false;
+        static bool pre_prologue_phase = false;
+        static bool last_was_input_call = false;
+        static char last_input_temp[64] = "";
 
-        emitInstruction(ctx, "addi r30 r30 %d", stack_frame_size_ir); // Allocate stack
-        emitInstruction(ctx, "sw r31 r30 1");     // Store return address at r30+1 (first slot)
-        
-        // Store incoming parameters to memory (r1, r2, ... to r30+2, r30+3, ...)
-        // The offsets are now part of the variable_table in codegen.c and passed in loadVar/storeVar
-        // So, this loop is conceptually for moving them from parameter registers (r1, r2) to their actual stack slots.
-        // It relies on loadVar/storeVar to correctly use offsets.
-        // The parameter passing itself (r1, r2, etc.) is handled by 'param' IR.
-        // The saving of params to stack will happen implicitly as loadVar/storeVar
-        // are used on them.
-        
-    } else if (strcmp(op, "funFim") == 0) {
-        // Function epilogue - restore and return with dynamic stack deallocation
-        // `arg1` is the function name for `funFim` (e.g., `funFim main ___ ___`)
-        if (strcmp(arg1, "main") == 0) {
-            emitInstruction(ctx, "halt");
-        } else {
-            // For all other functions, follow standard return convention
-            // 1. Restore return address (R31) from its saved location (R30 + 0)
-            emitInstruction(ctx, "lw r31 r30 0");
-            // 2. Deallocate stack frame (move stack pointer R30 back)
-            emitInstruction(ctx, "subi r30 r30 %d", ctx->current_stack_slots);
-            // 3. Jump to return address
-            emitInstruction(ctx, "jr r31");
+        // If we see allocaMemVar and not in_function, buffer it
+        if (strcmp(op, "allocaMemVar") == 0 && !ctx->in_function) {
+            if (pending_alloca_count < MAX_PENDING_ALLOCAS) {
+                strncpy(pending_allocas[pending_alloca_count].scope, arg1, 63);
+                pending_allocas[pending_alloca_count].scope[63] = '\0';
+                strncpy(pending_allocas[pending_alloca_count].name, arg2, 63);
+                pending_allocas[pending_alloca_count].name[63] = '\0';
+                pending_alloca_count++;
+            }
+            return;
         }
-    // ...allocaMemVar/allocaMemVet handlers removed as per changes.txt...
-        
-    } else if (strcmp(op, "loadVar") == 0) {
-        // loadVar var_name offset dest_reg (new IR format)
-        int dest_reg = allocateRegister(ctx, arg3); // dest_reg is in arg3
-        int memory_offset = atoi(arg2); // offset is in arg2 (new IR)
-        
-        emitInstruction(ctx, "lw r%d r30 %d", dest_reg, memory_offset); // Load from stack[offset]
-        
-    } else if (strcmp(op, "storeVar") == 0) {
-        // storeVar src_reg var_name offset (new IR format)
-        int src_reg = allocateRegister(ctx, arg1); // src_reg is in arg1
-        int memory_offset = atoi(arg3); // offset is in arg3 (new IR)
-        
-        emitInstruction(ctx, "sw r%d r30 %d", src_reg, memory_offset);  // Store to stack[offset]
-        
-    } else if (strcmp(op, "param") == 0) {
-        ctx->param_counter++; // 1 for first param, 2 for second
-        
-        if (isImmediate(arg1)) {
-            // Handle immediate values directly with li instruction
-            int immediate_val = atoi(arg1);
-            if (ctx->param_counter == 1) {
-                if (immediate_val == 0) {
-                    emitInstruction(ctx, "move r1 r0"); // li r1, 0 -> move r1, r0
-                } else {
-                    emitInstruction(ctx, "addi r1 r0 %d", immediate_val); // li r1, immediate
-                }
-            } else if (ctx->param_counter == 2) {
-                if (immediate_val == 0) {
-                    emitInstruction(ctx, "move r2 r0"); // li r2, 0 -> move r2, r0
-                } else {
-                    emitInstruction(ctx, "addi r2 r0 %d", immediate_val); // li r2, immediate
-                }
-            } else {
-                // For more parameters
-                if (immediate_val == 0) {
-                    emitInstruction(ctx, "move r%d r0", ctx->param_counter);
-                } else {
-                    emitInstruction(ctx, "addi r%d r0 %d", ctx->param_counter, immediate_val);
+        if (strcmp(op, "funInicio") == 0) {
+            ctx->in_function = true;
+            ctx->var_offset_map_count = 0;
+            strncpy(current_func_name, arg1, 63);
+            current_func_name[63] = '\0';
+            prologue_emitted = false;
+            seen_real_instruction = false;
+            pre_prologue_phase = true;
+            fprintf(ctx->output, "Func %s:\n", arg1);
+            resetFunctionContext(ctx, arg1);
+            // Flush pending allocas for this function
+            for (int i = 0; i < pending_alloca_count; i++) {
+                if (strcmp(pending_allocas[i].scope, arg1) == 0) {
+                    int offset = ctx->var_offset_map_count + 1;
+                    strncpy(ctx->var_offsets[ctx->var_offset_map_count].scope, pending_allocas[i].scope, 63);
+                    ctx->var_offsets[ctx->var_offset_map_count].scope[63] = '\0';
+                    strncpy(ctx->var_offsets[ctx->var_offset_map_count].name, pending_allocas[i].name, 63);
+                    ctx->var_offsets[ctx->var_offset_map_count].name[63] = '\0';
+                    ctx->var_offsets[ctx->var_offset_map_count].offset = offset;
+                    printf("DEBUG: allocaMemVar %s.%s assigned offset %d (from pending)\n", pending_allocas[i].scope, pending_allocas[i].name, offset);
+                    ctx->var_offset_map_count++;
                 }
             }
-        } else {
-            // Handle register/variable values
-            int param_val_reg = allocateRegister(ctx, arg1); // This is the temp holding the parameter's value
-            if (ctx->param_counter == 1) {
-                emitInstruction(ctx, "move r1 r%d", param_val_reg); // First parameter goes to r1
-            } else if (ctx->param_counter == 2) {
-                emitInstruction(ctx, "move r2 r%d", param_val_reg); // Second parameter goes to r2
+            // Remove flushed allocas from pending buffer
+            int j = 0;
+            for (int i = 0; i < pending_alloca_count; i++) {
+                if (strcmp(pending_allocas[i].scope, arg1) != 0) {
+                    if (i != j) pending_allocas[j] = pending_allocas[i];
+                    j++;
+                }
+            }
+            pending_alloca_count = j;
+            return;
+        }
+        // If we are in pre_prologue_phase and see a real instruction, emit prologue now
+        if (ctx->in_function && !prologue_emitted && pre_prologue_phase && strcmp(op, "allocaMemVar") != 0 && strcmp(op, "funInicio") != 0) {
+            // Print all var_offsets before emitting prologue
+            printf("DEBUG: var_offsets before prologue for %s:\n", current_func_name);
+            for (int i = 0; i < ctx->var_offset_map_count; i++) {
+                printf("  [%d] scope='%s' name='%s' offset=%d\n", i, ctx->var_offsets[i].scope, ctx->var_offsets[i].name, ctx->var_offsets[i].offset);
+            }
+            current_stack_size = ctx->var_offset_map_count + 1; // +1 for RA
+            printf("DEBUG: Prologue for %s, stack size = %d\n", current_func_name, current_stack_size);
+            emitInstruction(ctx, "addi r30 r30 %d", current_stack_size);
+            emitInstruction(ctx, "sw r31 r30 0");
+            // Save r1 and r2 as parameters if the function has at least 1 or 2 parameters
+            int param_count = 0;
+            for (int i = 0; i < ctx->var_offset_map_count; i++) {
+                // Heuristic: parameters are the first variables in the function's var_offsets
+                // If the variable name matches the function's parameter list, count as param
+                // For now, assume first two are parameters if function is not main
+                if (strcmp(current_func_name, "main") != 0 && param_count < 2) {
+                    emitInstruction(ctx, "sw r%d r30 %d", param_count + 1, param_count + 1); // r1->1, r2->2
+                    param_count++;
+                }
+            }
+            prologue_emitted = true;
+            seen_real_instruction = true;
+            pre_prologue_phase = false;
+            // Debug print after re-parsing
+            parsed = sscanf(line, "%s %s %s %s %s", op, arg1, arg2, arg3, arg4);
+            if (parsed < 1) return;
+            if ((comma = strchr(arg1, ',')) != NULL) *comma = '\0';
+            if ((comma = strchr(arg2, ',')) != NULL) *comma = '\0';
+            if ((comma = strchr(arg3, ',')) != NULL) *comma = '\0';
+            if ((comma = strchr(arg4, ',')) != NULL) *comma = '\0';
+            if (parsed < 2) arg1[0] = '\0';
+            if (parsed < 3) arg2[0] = '\0';
+            if (parsed < 4) arg3[0] = '\0';
+            if (parsed < 5) arg4[0] = '\0';
+            printf("DEBUG: After prologue, reparsed op='%s' arg1='%s' arg2='%s' arg3='%s' arg4='%s'\n", op, arg1, arg2, arg3, arg4);
+            reprocess = 1;
+            continue;
+        }
+        else if (strcmp(op, "loadVar") == 0 && ctx->in_function) {
+            printf("DEBUG: loadVar arg1='|%s|' arg2='|%s|'\n", arg1, arg2);
+            trim(arg1); trim(arg2);
+            int offset = -1;
+            for (int i = 0; i < ctx->var_offset_map_count; i++) {
+                if (strcmp(ctx->var_offsets[i].name, arg2) == 0 && strcmp(ctx->var_offsets[i].scope, arg1) == 0) {
+                    offset = ctx->var_offsets[i].offset;
+                    break;
+                }
+            }
+            printf("DEBUG: loadVar %s.%s offset %d\n", arg1, arg2, offset);
+            int dest_reg = allocateRegister(ctx, arg3);
+            if (offset >= 0) {
+                emitInstruction(ctx, "lw r%d r30 %d", dest_reg, offset);
             } else {
-                // For more parameters, push to stack or use other conventions
-                emitInstruction(ctx, "move r%d r%d", ctx->param_counter, param_val_reg); // Fallback to r3, r4 etc.
+                emitInstruction(ctx, "lw r%d r30 0", dest_reg);
             }
         }
-    } else if (strcmp(op, "call") == 0) {
-        // Function call
-        if (strcmp(arg1, "input") == 0) {
-            // Built-in input function
-            emitInstruction(ctx, "input r28");  // Read input to return register
-        } else if (strcmp(arg1, "output") == 0) {
-            // Built-in output function  
-            emitInstruction(ctx, "outputreg r1"); // Output from parameter register
-        } else {
-            // User-defined function call
-            emitInstruction(ctx, "jal %s", arg1);  // Jump and link to function
+        else if (strcmp(op, "storeVar") == 0 && ctx->in_function) {
+            printf("DEBUG: storeVar arg2='|%s|' arg3='|%s|'\n", arg2, arg3);
+            trim(arg2); trim(arg3);
+            int offset = -1;
+            for (int i = 0; i < ctx->var_offset_map_count; i++) {
+                if (strcmp(ctx->var_offsets[i].name, arg2) == 0 && strcmp(ctx->var_offsets[i].scope, arg3) == 0) {
+                    offset = ctx->var_offsets[i].offset;
+                    break;
+                }
+            }
+            printf("DEBUG: storeVar %s.%s offset %d\n", arg3, arg2, offset);
+            int src_reg = allocateRegister(ctx, arg1);
+            if (offset >= 0) {
+                emitInstruction(ctx, "sw r%d r30 %d", src_reg, offset);
+            } else {
+                emitInstruction(ctx, "sw r%d r30 0", src_reg);
+            }
         }
-        ctx->param_counter = 0;  // Reset parameter counter after call
-        
-    } else if (strcmp(op, "move") == 0) {
-        int dest_reg, src_reg;
+        else if (strcmp(op, "funFim") == 0 && ctx->in_function) {
+            if (!prologue_emitted) {
+                emitInstruction(ctx, "addi r30 r30 %d", current_stack_size);
+                emitInstruction(ctx, "sw r31 r30 0");
+                prologue_emitted = true;
+            }
+            if (strcmp(arg1, "main") == 0) {
+                emitInstruction(ctx, "halt");
+            } else {
+                emitInstruction(ctx, "lw r31 r30 0");
+                emitInstruction(ctx, "subi r30 r30 %d", current_stack_size);
+                emitInstruction(ctx, "jr r31");
+            }
+            ctx->in_function = false;
+        }
+        // ...allocaMemVar/allocaMemVet handlers removed as per changes.txt...
+            
+        else if (strcmp(op, "param") == 0) {
+            ctx->param_counter++; // 1 for first param, 2 for second
+            
+            if (isImmediate(arg1)) {
+                // Handle immediate values directly with li instruction
+                int immediate_val = atoi(arg1);
+                if (ctx->param_counter == 1) {
+                    if (immediate_val == 0) {
+                        emitInstruction(ctx, "move r1 r0"); // li r1, 0 -> move r1, r0
+                    } else {
+                        emitInstruction(ctx, "addi r1 r0 %d", immediate_val); // li r1, immediate
+                    }
+                } else if (ctx->param_counter == 2) {
+                    if (immediate_val == 0) {
+                        emitInstruction(ctx, "move r2 r0"); // li r2, 0 -> move r2, r0
+                    } else {
+                        emitInstruction(ctx, "addi r2 r0 %d", immediate_val); // li r2, immediate
+                    }
+                } else {
+                    // For more parameters
+                    if (immediate_val == 0) {
+                        emitInstruction(ctx, "move r%d r0", ctx->param_counter);
+                    } else {
+                        emitInstruction(ctx, "addi r%d r0 %d", ctx->param_counter, immediate_val);
+                    }
+                }
+            } else {
+                // Handle register/variable values
+                int param_val_reg = allocateRegister(ctx, arg1); // This is the temp holding the parameter's value
+                if (ctx->param_counter == 1) {
+                    emitInstruction(ctx, "move r1 r%d", param_val_reg); // First parameter goes to r1
+                } else if (ctx->param_counter == 2) {
+                    emitInstruction(ctx, "move r2 r%d", param_val_reg); // Second parameter goes to r2
+                } else {
+                    // For more parameters, push to stack or use other conventions
+                    emitInstruction(ctx, "move r%d r%d", ctx->param_counter, param_val_reg); // Fallback to r3, r4 etc.
+                }
+            }
+        } else if (strcmp(op, "call") == 0) {
+            // Function call
+            if (strcmp(arg1, "input") == 0) {
+                // Built-in input function
+                emitInstruction(ctx, "input r28");  // Always emit input for every call input 0 ___
+                // Do NOT set or use any flag, and do NOT return here; allow further processing
+            } else if (strcmp(arg1, "output") == 0) {
+                // Built-in output function  
+                emitInstruction(ctx, "outputreg r1"); // Output from parameter register
+            } else {
+                // User-defined function call
+                emitInstruction(ctx, "jal %s", arg1);  // Jump and link to function
+            }
+            ctx->param_counter = 0;  // Reset parameter counter after call
+            
+        } else if (strcmp(op, "move") == 0) {
+            // If last was input call and move is tX $rf ___, track temp
+            if (last_was_input_call && strcmp(arg2, "$rf") == 0) {
+                int dest_reg = allocateRegister(ctx, arg1);
+                emitInstruction(ctx, "move r%d r28", dest_reg);
+                strcpy(last_input_temp, arg1);
+                last_was_input_call = false;
+                printf("DEBUG: Moved input result to %s (r%d <- r28)\n", arg1, dest_reg);
+                return;
+            }
+            int dest_reg, src_reg;
 
-        // Determine destination register
-        if (strcmp(arg1, "$rf") == 0) { // If destination is $rf
-            dest_reg = 28;
-        } else {
-            dest_reg = allocateRegister(ctx, arg1); // arg1 is the destination (e.g., t0)
-        }
+            // Determine destination register
+            if (strcmp(arg1, "$rf") == 0) { // If destination is $rf
+                dest_reg = 28;
+            } else {
+                dest_reg = allocateRegister(ctx, arg1); // arg1 is the destination (e.g., t0)
+            }
 
-        // Determine source register
-        if (strcmp(arg2, "$rf") == 0) { // If source is $rf
-            src_reg = 28;
-        } else {
-            src_reg = allocateRegister(ctx, arg2); // arg2 is the source (e.g., t1)
-        }
-        emitInstruction(ctx, "move r%d r%d", dest_reg, src_reg);
-        printf("DEBUG: Moved value from %s to %s (r%d <- r%d)\n", arg2, arg1, dest_reg, src_reg);
-    } else if (strcmp(op, "add") == 0) {
-        // Addition: add src1 src2 dest
-        int src1_reg = allocateRegister(ctx, arg1);
-        int dest_reg = allocateRegister(ctx, arg3);
-        
-        if (isImmediate(arg2)) {
-            int val = atoi(arg2);
-            emitInstruction(ctx, "addi r%d r%d %d", dest_reg, src1_reg, val);
-        } else {
+            // Determine source register
+            if (strcmp(arg2, "$rf") == 0) { // If source is $rf
+                src_reg = 28;
+            } else {
+                src_reg = allocateRegister(ctx, arg2); // arg2 is the source (e.g., t1)
+            }
+            emitInstruction(ctx, "move r%d r%d", dest_reg, src_reg);
+            printf("DEBUG: Moved value from %s to %s (r%d <- r%d)\n", arg2, arg1, dest_reg, src_reg);
+        } else if (strcmp(op, "add") == 0) {
+            // Addition: add src1 src2 dest
+            int src1_reg = allocateRegister(ctx, arg1);
+            int dest_reg = allocateRegister(ctx, arg3);
+            
+            if (isImmediate(arg2)) {
+                int val = atoi(arg2);
+                emitInstruction(ctx, "addi r%d r%d %d", dest_reg, src1_reg, val);
+            } else {
+                int src2_reg = allocateRegister(ctx, arg2);
+                emitInstruction(ctx, "add r%d r%d r%d", dest_reg, src1_reg, src2_reg);
+            }
+            
+        } else if (strcmp(op, "sub") == 0) {
+            // Subtraction: sub src1 src2 dest
+            int src1_reg = allocateRegister(ctx, arg1);
+            int dest_reg = allocateRegister(ctx, arg3);
+            
+            if (isImmediate(arg2)) {
+                int val = atoi(arg2);
+                emitInstruction(ctx, "subi r%d r%d %d", dest_reg, src1_reg, val);
+            } else {
+                int src2_reg = allocateRegister(ctx, arg2);
+                emitInstruction(ctx, "sub r%d r%d r%d", dest_reg, src1_reg, src2_reg);
+            }
+            
+        } else if (strcmp(op, "mult") == 0) {
+            // Multiplication: mult src1 src2 dest
+            int src1_reg = allocateRegister(ctx, arg1);
             int src2_reg = allocateRegister(ctx, arg2);
-            emitInstruction(ctx, "add r%d r%d r%d", dest_reg, src1_reg, src2_reg);
-        }
-        
-    } else if (strcmp(op, "sub") == 0) {
-        // Subtraction: sub src1 src2 dest
-        int src1_reg = allocateRegister(ctx, arg1);
-        int dest_reg = allocateRegister(ctx, arg3);
-        
-        if (isImmediate(arg2)) {
-            int val = atoi(arg2);
-            emitInstruction(ctx, "subi r%d r%d %d", dest_reg, src1_reg, val);
-        } else {
+            int dest_reg = allocateRegister(ctx, arg3);
+            
+            emitInstruction(ctx, "mult r%d r%d", src1_reg, src2_reg);
+            emitInstruction(ctx, "mflo r%d", dest_reg);  // Get low part of multiplication from LO
+            
+        } else if (strcmp(op, "div") == 0) {
+            // Division: div src1 src2 dest (changed from divisao to div)
+            int src1_reg = allocateRegister(ctx, arg1);
             int src2_reg = allocateRegister(ctx, arg2);
-            emitInstruction(ctx, "sub r%d r%d r%d", dest_reg, src1_reg, src2_reg);
-        }
-        
-    } else if (strcmp(op, "mult") == 0) {
-        // Multiplication: mult src1 src2 dest
+            int dest_reg = allocateRegister(ctx, arg3);
+            
+            emitInstruction(ctx, "div r%d r%d", src1_reg, src2_reg);
+            emitInstruction(ctx, "mflo r%d", dest_reg);  // Get quotient from LO
+            
+        } else if (strcmp(op, "slt") == 0) {
+            // Set less than: slt src1 src2 dest (dest = src1 < src2)
+            int src1_reg = allocateRegister(ctx, arg1);
+            int src2_reg = allocateRegister(ctx, arg2);
+            int dest_reg = allocateRegister(ctx, arg3);
+            
+            emitInstruction(ctx, "slt r%d r%d r%d", dest_reg, src1_reg, src2_reg);
+            
+        } else if (strcmp(op, "sgt") == 0) {
+            // Set greater than: sgt src1 src2 dest (dest = src1 > src2)
+            int src1_reg = allocateRegister(ctx, arg1);
+            int src2_reg = allocateRegister(ctx, arg2);
+            int dest_reg = allocateRegister(ctx, arg3);
+            
+            emitInstruction(ctx, "slt r%d r%d r%d", dest_reg, src2_reg, src1_reg); // Swap operands
+            
+        } else if (strcmp(op, "slet") == 0) {
+            // Set less than or equal: slet src1 src2 dest (dest = src1 <= src2)
+            int src1_reg = allocateRegister(ctx, arg1);
+            int src2_reg = allocateRegister(ctx, arg2);
+            int dest_reg = allocateRegister(ctx, arg3);
+            
+            emitInstruction(ctx, "slt r59 r%d r%d", src2_reg, src1_reg); // r59 = src2 < src1
+            emitInstruction(ctx, "slt r%d r59 1", dest_reg);                     // dest = (r59 < 1) ? 1 : 0 = !r59
+            emitInstruction(ctx, "andi r%d r%d 1", dest_reg, dest_reg);           // Keep only bit 0
+            
+        } else if (strcmp(op, "sget") == 0) {
+            // Set greater than or equal: sget src1 src2 dest (dest = src1 >= src2)
+            int src1_reg = allocateRegister(ctx, arg1);
+            int src2_reg = allocateRegister(ctx, arg2);
+            int dest_reg = allocateRegister(ctx, arg3);
+            
+            emitInstruction(ctx, "slt r59 r%d r%d", src1_reg, src2_reg); // r59 = src1 < src2
+            emitInstruction(ctx, "slt r%d r59 1", dest_reg);                     // dest = (r59 < 1) ? 1 : 0 = !r59
+            emitInstruction(ctx, "andi r%d r%d 1", dest_reg, dest_reg);           // Keep only bit 0
+            
+        } else if (strcmp(op, "sdt") == 0) {
+            // Set different: sdt src1 src2 dest (dest = src1 != src2)
+            int src1_reg = allocateRegister(ctx, arg1);
+            int dest_reg = allocateRegister(ctx, arg3);
+            
+            if (isImmediate(arg2)) {
+                int val = atoi(arg2);
+                if (val == 0) {
+                    // Compare with zero - result is 1 if not zero, 0 if zero
+                    emitInstruction(ctx, "move r59 r%d", src1_reg);          // r59 = src1 (no need to subtract 0)
+                    emitInstruction(ctx, "bne r59 r0 neq_%d", ctx->label_counter);
+                    emitInstruction(ctx, "li r%d 0", dest_reg);              // Equal
+                    emitInstruction(ctx, "j end_%d", ctx->label_counter);
+                    emitLabel(ctx, "neq_%d:", ctx->label_counter);
+                    emitInstruction(ctx, "li r%d 1", dest_reg);              // Not equal
+                    emitLabel(ctx, "end_%d:", ctx->label_counter);
+                    ctx->label_counter++;
+                } else {
+                    emitInstruction(ctx, "addi r58 r0 %d", val);                   // Load immediate using addi from r0
+                    emitInstruction(ctx, "sub r59 r%d r58", src1_reg);        // r59 = src1 - val
+                    emitInstruction(ctx, "bne r59 r0 neq_%d", ctx->label_counter);
+                    emitInstruction(ctx, "li r%d 0", dest_reg);              // Equal
+                    emitInstruction(ctx, "j end_%d", ctx->label_counter);
+                    emitLabel(ctx, "neq_%d:", ctx->label_counter);
+                    emitInstruction(ctx, "li r%d 1", dest_reg);              // Not equal
+                    emitLabel(ctx, "end_%d:", ctx->label_counter);
+                    ctx->label_counter++;
+                }
+            } else {
+                int src2_reg = allocateRegister(ctx, arg2);
+                emitInstruction(ctx, "sub r59 r%d r%d", src1_reg, src2_reg);
+                emitInstruction(ctx, "bne r59 r0 neq_%d", ctx->label_counter);
+                emitInstruction(ctx, "li r%d 0", dest_reg);                  // Equal
+                emitInstruction(ctx, "j end_%d", ctx->label_counter);
+                emitLabel(ctx, "neq_%d:", ctx->label_counter);
+                emitInstruction(ctx, "li r%d 1", dest_reg);                  // Not equal
+                emitLabel(ctx, "end_%d:", ctx->label_counter);
+                ctx->label_counter++;
+            }
+            
+        } else if (strcmp(op, "loadVet") == 0) {
+            // loadVet array_name base_offset index_reg dest_reg (new IR format)
+            int dest_reg = allocateRegister(ctx, arg4); // dest_reg is in arg4
+            int array_base_offset = atoi(arg2); // array_base_offset is in arg2 (new IR)
+            int index_val_reg = allocateRegister(ctx, arg3); // index_value is in arg3 (reg with actual index)
+
+            emitInstruction(ctx, "addi r57 r30 %d", array_base_offset); // r57 = R30 + array_base_offset
+            emitInstruction(ctx, "sll r58 r%d 2", index_val_reg);     // r58 = index_val_reg * 4 (byte offset)
+            emitInstruction(ctx, "add r57 r57 r58");                 // r57 = effective_address = r57 + byte_offset
+            emitInstruction(ctx, "lw r%d r57 0", dest_reg);          // Load from effective_address
+            
+        } else if (strcmp(op, "storeVet") == 0) {
+            // storeVet src_reg array_name base_offset index_reg (new IR format)
+            int src_reg = allocateRegister(ctx, arg1); // src_reg is in arg1
+            int array_base_offset = atoi(arg3); // array_base_offset is in arg3 (new IR)
+            int index_val_reg = allocateRegister(ctx, arg4); // index_value is in arg4 (reg with actual index)
+
+            emitInstruction(ctx, "addi r57 r30 %d", array_base_offset); // r57 = R30 + array_base_offset
+            emitInstruction(ctx, "sll r58 r%d 2", index_val_reg);     // r58 = index_val_reg * 4 (byte offset)
+            emitInstruction(ctx, "add r57 r57 r58");                 // r57 = effective_address = r57 + byte_offset
+            emitInstruction(ctx, "sw r%d r57 0", src_reg);           // Store to effective_address
+            
+        } else if (strcmp(op, "GLOBAL_ARRAY") == 0) {
+            // Global array declaration
+            emitInstruction(ctx, "# Global array %s[%s]", arg1, arg2);
+            
+        } else if (strcmp(op, "li") == 0) {
+            // LI RT, IMMEDIATE - convert to addi from r0
+            int rt_reg = allocateRegister(ctx, arg1);
+            int immediate_val = atoi(arg2); // arg2 is the immediate value string
+            if (immediate_val == 0) {
+                emitInstruction(ctx, "move r%d r0", rt_reg);
+            } else {
+                emitInstruction(ctx, "addi r%d r0 %d", rt_reg, immediate_val);
+            }
+        } else if (strcmp(op, "set") == 0) {
+        printf("DEBUG: Processing set instruction\n");
+        // Set equal comparison: set src1 src2 dest (dest = src1 == src2)
         int src1_reg = allocateRegister(ctx, arg1);
-        int src2_reg = allocateRegister(ctx, arg2);
-        int dest_reg = allocateRegister(ctx, arg3);
-        
-        emitInstruction(ctx, "mult r%d r%d", src1_reg, src2_reg);
-        emitInstruction(ctx, "mflo r%d", dest_reg);  // Get low part of multiplication from LO
-        
-    } else if (strcmp(op, "div") == 0) {
-        // Division: div src1 src2 dest (changed from divisao to div)
-        int src1_reg = allocateRegister(ctx, arg1);
-        int src2_reg = allocateRegister(ctx, arg2);
-        int dest_reg = allocateRegister(ctx, arg3);
-        
-        emitInstruction(ctx, "div r%d r%d", src1_reg, src2_reg);
-        emitInstruction(ctx, "mflo r%d", dest_reg);  // Get quotient from LO
-        
-    } else if (strcmp(op, "slt") == 0) {
-        // Set less than: slt src1 src2 dest (dest = src1 < src2)
-        int src1_reg = allocateRegister(ctx, arg1);
-        int src2_reg = allocateRegister(ctx, arg2);
-        int dest_reg = allocateRegister(ctx, arg3);
-        
-        emitInstruction(ctx, "slt r%d r%d r%d", dest_reg, src1_reg, src2_reg);
-        
-    } else if (strcmp(op, "sgt") == 0) {
-        // Set greater than: sgt src1 src2 dest (dest = src1 > src2)
-        int src1_reg = allocateRegister(ctx, arg1);
-        int src2_reg = allocateRegister(ctx, arg2);
-        int dest_reg = allocateRegister(ctx, arg3);
-        
-        emitInstruction(ctx, "slt r%d r%d r%d", dest_reg, src2_reg, src1_reg); // Swap operands
-        
-    } else if (strcmp(op, "slet") == 0) {
-        // Set less than or equal: slet src1 src2 dest (dest = src1 <= src2)
-        int src1_reg = allocateRegister(ctx, arg1);
-        int src2_reg = allocateRegister(ctx, arg2);
-        int dest_reg = allocateRegister(ctx, arg3);
-        
-        emitInstruction(ctx, "slt r59 r%d r%d", src2_reg, src1_reg); // r59 = src2 < src1
-        emitInstruction(ctx, "slt r%d r59 1", dest_reg);                     // dest = (r59 < 1) ? 1 : 0 = !r59
-        emitInstruction(ctx, "andi r%d r%d 1", dest_reg, dest_reg);           // Keep only bit 0
-        
-    } else if (strcmp(op, "sget") == 0) {
-        // Set greater than or equal: sget src1 src2 dest (dest = src1 >= src2)
-        int src1_reg = allocateRegister(ctx, arg1);
-        int src2_reg = allocateRegister(ctx, arg2);
-        int dest_reg = allocateRegister(ctx, arg3);
-        
-        emitInstruction(ctx, "slt r59 r%d r%d", src1_reg, src2_reg); // r59 = src1 < src2
-        emitInstruction(ctx, "slt r%d r59 1", dest_reg);                     // dest = (r59 < 1) ? 1 : 0 = !r59
-        emitInstruction(ctx, "andi r%d r%d 1", dest_reg, dest_reg);           // Keep only bit 0
-        
-    } else if (strcmp(op, "sdt") == 0) {
-        // Set different: sdt src1 src2 dest (dest = src1 != src2)
-        int src1_reg = allocateRegister(ctx, arg1);
-        int dest_reg = allocateRegister(ctx, arg3);
-        
+        int dest_reg = allocateRegister(ctx, arg3); // This will be t1 in your GCD example
+
         if (isImmediate(arg2)) {
             int val = atoi(arg2);
             if (val == 0) {
-                // Compare with zero - result is 1 if not zero, 0 if zero
-                emitInstruction(ctx, "move r59 r%d", src1_reg);          // r59 = src1 (no need to subtract 0)
-                emitInstruction(ctx, "bne r59 r0 neq_%d", ctx->label_counter);
-                emitInstruction(ctx, "li r%d 0", dest_reg);              // Equal
-                emitInstruction(ctx, "j end_%d", ctx->label_counter);
-                emitLabel(ctx, "neq_%d:", ctx->label_counter);
-                emitInstruction(ctx, "li r%d 1", dest_reg);              // Not equal
-                emitLabel(ctx, "end_%d:", ctx->label_counter);
-                ctx->label_counter++;
+                // Check if src1_reg == 0. If so, dest_reg = 1, else 0.
+                // Use positive-only logic: if src1_reg < 1, then it's 0 (assuming non-negative values)
+                emitInstruction(ctx, "slt r%d r%d 1", dest_reg, src1_reg);       // dest_reg = (src1_reg < 1) ? 1 : 0 = (src1_reg == 0) ? 1 : 0
+                emitInstruction(ctx, "andi r%d r%d 1", dest_reg, dest_reg); // Force result to 0 or 1.
+                
             } else {
-                emitInstruction(ctx, "addi r58 r0 %d", val);                   // Load immediate using addi from r0
-                emitInstruction(ctx, "sub r59 r%d r58", src1_reg);        // r59 = src1 - val
-                emitInstruction(ctx, "bne r59 r0 neq_%d", ctx->label_counter);
-                emitInstruction(ctx, "li r%d 0", dest_reg);              // Equal
-                emitInstruction(ctx, "j end_%d", ctx->label_counter);
-                emitLabel(ctx, "neq_%d:", ctx->label_counter);
-                emitInstruction(ctx, "li r%d 1", dest_reg);              // Not equal
-                emitLabel(ctx, "end_%d:", ctx->label_counter);
-                ctx->label_counter++;
+                // General case for "set src1 val dest" (dest = src1 == val)
+                emitInstruction(ctx, "addi r58 r0 %d", val);
+                emitInstruction(ctx, "sub r59 r%d r58", src1_reg);     // r59 = src1 - val
+                // Check if r59 == 0 using positive-only logic
+                emitInstruction(ctx, "slt r60 r0 r59");                // r60 = (0 < r59) ? 1 : 0  (r59 > 0)
+                emitInstruction(ctx, "slt r61 r59 r0");                // r61 = (r59 < 0) ? 1 : 0  (r59 < 0)
+                emitInstruction(ctx, "add r58 r60 r61");               // r58 = r60 + r61 = (r59 != 0) ? 1 : 0
+                emitInstruction(ctx, "slt r%d r58 1", dest_reg);       // dest_reg = (r58 < 1) ? 1 : 0 = (r59 == 0) ? 1 : 0
+                emitInstruction(ctx, "andi r%d r%d 1", dest_reg, dest_reg);
             }
         } else {
             int src2_reg = allocateRegister(ctx, arg2);
-            emitInstruction(ctx, "sub r59 r%d r%d", src1_reg, src2_reg);
-            emitInstruction(ctx, "bne r59 r0 neq_%d", ctx->label_counter);
-            emitInstruction(ctx, "li r%d 0", dest_reg);                  // Equal
-            emitInstruction(ctx, "j end_%d", ctx->label_counter);
-            emitLabel(ctx, "neq_%d:", ctx->label_counter);
-            emitInstruction(ctx, "li r%d 1", dest_reg);                  // Not equal
-            emitLabel(ctx, "end_%d:", ctx->label_counter);
-            ctx->label_counter++;
-        }
-        
-    } else if (strcmp(op, "loadVet") == 0) {
-        // loadVet array_name base_offset index_reg dest_reg (new IR format)
-        int dest_reg = allocateRegister(ctx, arg4); // dest_reg is in arg4
-        int array_base_offset = atoi(arg2); // array_base_offset is in arg2 (new IR)
-        int index_val_reg = allocateRegister(ctx, arg3); // index_value is in arg3 (reg with actual index)
-
-        emitInstruction(ctx, "addi r57 r30 %d", array_base_offset); // r57 = R30 + array_base_offset
-        emitInstruction(ctx, "sll r58 r%d 2", index_val_reg);     // r58 = index_val_reg * 4 (byte offset)
-        emitInstruction(ctx, "add r57 r57 r58");                 // r57 = effective_address = r57 + byte_offset
-        emitInstruction(ctx, "lw r%d r57 0", dest_reg);          // Load from effective_address
-        
-    } else if (strcmp(op, "storeVet") == 0) {
-        // storeVet src_reg array_name base_offset index_reg (new IR format)
-        int src_reg = allocateRegister(ctx, arg1); // src_reg is in arg1
-        int array_base_offset = atoi(arg3); // array_base_offset is in arg3 (new IR)
-        int index_val_reg = allocateRegister(ctx, arg4); // index_value is in arg4 (reg with actual index)
-
-        emitInstruction(ctx, "addi r57 r30 %d", array_base_offset); // r57 = R30 + array_base_offset
-        emitInstruction(ctx, "sll r58 r%d 2", index_val_reg);     // r58 = index_val_reg * 4 (byte offset)
-        emitInstruction(ctx, "add r57 r57 r58");                 // r57 = effective_address = r57 + byte_offset
-        emitInstruction(ctx, "sw r%d r57 0", src_reg);           // Store to effective_address
-        
-    } else if (strcmp(op, "GLOBAL_ARRAY") == 0) {
-        // Global array declaration
-        emitInstruction(ctx, "# Global array %s[%s]", arg1, arg2);
-        
-    } else if (strcmp(op, "li") == 0) {
-        // LI RT, IMMEDIATE - convert to addi from r0
-        int rt_reg = allocateRegister(ctx, arg1);
-        int immediate_val = atoi(arg2); // arg2 is the immediate value string
-        if (immediate_val == 0) {
-            emitInstruction(ctx, "move r%d r0", rt_reg);
-        } else {
-            emitInstruction(ctx, "addi r%d r0 %d", rt_reg, immediate_val);
-        }
-    } else if (strcmp(op, "set") == 0) {
-    printf("DEBUG: Processing set instruction\n");
-    // Set equal comparison: set src1 src2 dest (dest = src1 == src2)
-    int src1_reg = allocateRegister(ctx, arg1);
-    int dest_reg = allocateRegister(ctx, arg3); // This will be t1 in your GCD example
-
-    if (isImmediate(arg2)) {
-        int val = atoi(arg2);
-        if (val == 0) {
-            // Check if src1_reg == 0. If so, dest_reg = 1, else 0.
-            // Use positive-only logic: if src1_reg < 1, then it's 0 (assuming non-negative values)
-            emitInstruction(ctx, "slt r%d r%d 1", dest_reg, src1_reg);       // dest_reg = (src1_reg < 1) ? 1 : 0 = (src1_reg == 0) ? 1 : 0
-            emitInstruction(ctx, "andi r%d r%d 1", dest_reg, dest_reg); // Force result to 0 or 1.
-            
-        } else {
-            // General case for "set src1 val dest" (dest = src1 == val)
-            emitInstruction(ctx, "addi r58 r0 %d", val);
-            emitInstruction(ctx, "sub r59 r%d r58", src1_reg);     // r59 = src1 - val
+            emitInstruction(ctx, "sub r59 r%d r%d", src1_reg, src2_reg); // r59 = src1 - src2
             // Check if r59 == 0 using positive-only logic
             emitInstruction(ctx, "slt r60 r0 r59");                // r60 = (0 < r59) ? 1 : 0  (r59 > 0)
             emitInstruction(ctx, "slt r61 r59 r0");                // r61 = (r59 < 0) ? 1 : 0  (r59 < 0)
@@ -643,294 +787,289 @@ void processIRLine(AssemblyContext *ctx, const char *line) {
             emitInstruction(ctx, "slt r%d r58 1", dest_reg);       // dest_reg = (r58 < 1) ? 1 : 0 = (r59 == 0) ? 1 : 0
             emitInstruction(ctx, "andi r%d r%d 1", dest_reg, dest_reg);
         }
-    } else {
-        int src2_reg = allocateRegister(ctx, arg2);
-        emitInstruction(ctx, "sub r59 r%d r%d", src1_reg, src2_reg); // r59 = src1 - src2
-        // Check if r59 == 0 using positive-only logic
-        emitInstruction(ctx, "slt r60 r0 r59");                // r60 = (0 < r59) ? 1 : 0  (r59 > 0)
-        emitInstruction(ctx, "slt r61 r59 r0");                // r61 = (r59 < 0) ? 1 : 0  (r59 < 0)
-        emitInstruction(ctx, "add r58 r60 r61");               // r58 = r60 + r61 = (r59 != 0) ? 1 : 0
-        emitInstruction(ctx, "slt r%d r58 1", dest_reg);       // dest_reg = (r58 < 1) ? 1 : 0 = (r59 == 0) ? 1 : 0
-        emitInstruction(ctx, "andi r%d r%d 1", dest_reg, dest_reg);
-    }
-        
-    // Replace it with the following:
-    } else if (strcmp(op, "seq") == 0) {
-        printf("DEBUG: Processing seq instruction (simplified)\n");
-        int src1_reg = allocateRegister(ctx, arg1);
-        int dest_reg = allocateRegister(ctx, arg3);
-
-        if (isImmediate(arg2)) {
-            int val = atoi(arg2);
-            // Handle LI for immediate value to compare against
-            emitInstruction(ctx, "li r58 %d", val); // Load immediate into temp reg r58
-            emitInstruction(ctx, "set r%d r%d r58", dest_reg, src1_reg); // Use 'set' instruction for equality
-        } else {
-            int src2_reg = allocateRegister(ctx, arg2);
-            emitInstruction(ctx, "set r%d r%d r%d", dest_reg, src1_reg, src2_reg); // Use 'set' instruction for equality
-        }
-    } else if (strcmp(op, "sne") == 0) {
-        // Set not equal: sne src1 src2 dest (dest = src1 != src2)
-        int src1_reg = allocateRegister(ctx, arg1);
-        int dest_reg = allocateRegister(ctx, arg3);
-        
-        if (isImmediate(arg2)) {
-            int val = atoi(arg2);
-            if (val == 0) {
-                // Simple case: dest = (src1 != 0) ? 1 : 0
-                emitInstruction(ctx, "slt r59 r%d 1", src1_reg);        // r59 = (src1 < 1) ? 1 : 0
-                emitInstruction(ctx, "slt r58 r0 r%d", src1_reg);       // r58 = (0 < src1) ? 1 : 0
-                emitInstruction(ctx, "add r%d r59 r58", dest_reg);      // dest = r59 + r58 = (src1 != 0) ? 1 : 0
-                emitInstruction(ctx, "andi r%d r%d 1", dest_reg, dest_reg);
-            } else {
-                emitInstruction(ctx, "addi r58 r0 %d", val);
-                emitInstruction(ctx, "sub r59 r%d r58", src1_reg);      // r59 = src1 - val
-                emitInstruction(ctx, "slt r58 r0 r59");                 // r58 = (0 < r59) ? 1 : 0  (positive case)
-                emitInstruction(ctx, "slt r57 r59 r0");                 // r57 = (r59 < 0) ? 1 : 0  (negative case)
-                emitInstruction(ctx, "add r%d r58 r57", dest_reg);      // dest = r58 + r57 = (r59 != 0) ? 1 : 0
-                emitInstruction(ctx, "andi r%d r%d 1", dest_reg, dest_reg);
-            }
-        } else {
-            int src2_reg = allocateRegister(ctx, arg2);
-            emitInstruction(ctx, "sub r59 r%d r%d", src1_reg, src2_reg); // r59 = src1 - src2
-            emitInstruction(ctx, "slt r58 r0 r59");                     // r58 = (0 < r59) ? 1 : 0  (positive case)
-            emitInstruction(ctx, "slt r57 r59 r0");                     // r57 = (r59 < 0) ? 1 : 0  (negative case)
-            emitInstruction(ctx, "add r%d r58 r57", dest_reg);          // dest = r58 + r57 = (r59 != 0) ? 1 : 0
-            emitInstruction(ctx, "andi r%d r%d 1", dest_reg, dest_reg);
-        }
-        
-    } else if (strcmp(op, "bne") == 0) {
-        // Branch if not equal: bne condition_reg label ___
-        int cond_reg = allocateRegister(ctx, arg1);
-        emitInstruction(ctx, "bne r%d r0 %s", cond_reg, arg2);  // Jump if condition is false (0)
-        
-    } else if (strcmp(op, "jump") == 0) {
-        // Unconditional jump: jump label ___ ___
-        emitInstruction(ctx, "j %s", arg1);
-        
-    } else if (strcmp(op, "label_op") == 0) {
-        // Label definition: label_op label ___ ___
-        emitLabel(ctx, "%s:", arg1);
-        
-    } else if (strcmp(op, "PARAM") == 0) {
-        // Parameter declaration - assign based on order, not name
-        int param_reg = 1 + ctx->param_counter;  // r1, r2, r3, etc.
-        
-        // Store the parameter mapping
-        for (int i = 0; i < 128; i++) {
-            if (!ctx->reg_map[i].valid) {
-                strcpy(ctx->reg_map[i].ir_name, arg1);
-                ctx->reg_map[i].phys_reg = param_reg;
-                ctx->reg_map[i].valid = 1;
-                ctx->reg_map[i].is_param = 1;
-                break;
-            }
-        }
-        
-        ctx->param_counter++;
-        emitInstruction(ctx, "# Parameter %s in r%d", arg1, param_reg);
-        
-    } else if (strcmp(op, "MOV") == 0) {
-        // MOV src, __, dest, __
-        if (isImmediate(arg1)) {
-            int val = atoi(arg1);
-            int dest_reg = allocateRegister(ctx, arg3);
-            emitInstruction(ctx, "li r%d %d", dest_reg, val);
-        } else {
-            int src_reg = allocateRegister(ctx, arg1);
-            int dest_reg = allocateRegister(ctx, arg3);
-            emitInstruction(ctx, "move r%d r%d", dest_reg, src_reg);
             
-            // If this is moving to a named variable, ensure we track it properly
-            // This helps fix IR inconsistencies where variables aren't properly mapped
-            if (arg3[0] && arg3[0] != 'R') {
-                // Update mapping to ensure variable is correctly tracked
-                for (int i = 0; i < 128; i++) {
-                    if (ctx->reg_map[i].valid && strcmp(ctx->reg_map[i].ir_name, arg3) == 0) {
-                        // Variable already tracked correctly
-                        break;
-                    }
-                    if (!ctx->reg_map[i].valid) {
-                        // Create proper tracking for this variable
-                        strcpy(ctx->reg_map[i].ir_name, arg3);
-                        ctx->reg_map[i].phys_reg = dest_reg;
-                        ctx->reg_map[i].valid = 1;
-                        break;
+        // Replace it with the following:
+        } else if (strcmp(op, "seq") == 0) {
+            printf("DEBUG: Processing seq instruction (simplified)\n");
+            int src1_reg = allocateRegister(ctx, arg1);
+            int dest_reg = allocateRegister(ctx, arg3);
+
+            if (isImmediate(arg2)) {
+                int val = atoi(arg2);
+                // Handle LI for immediate value to compare against
+                emitInstruction(ctx, "li r58 %d", val); // Load immediate into temp reg r58
+                emitInstruction(ctx, "set r%d r%d r58", dest_reg, src1_reg); // Use 'set' instruction for equality
+            } else {
+                int src2_reg = allocateRegister(ctx, arg2);
+                emitInstruction(ctx, "set r%d r%d r%d", dest_reg, src1_reg, src2_reg); // Use 'set' instruction for equality
+            }
+        } else if (strcmp(op, "sne") == 0) {
+            // Set not equal: sne src1 src2 dest (dest = src1 != src2)
+            int src1_reg = allocateRegister(ctx, arg1);
+            int dest_reg = allocateRegister(ctx, arg3);
+            
+            if (isImmediate(arg2)) {
+                int val = atoi(arg2);
+                if (val == 0) {
+                    // Simple case: dest = (src1 != 0) ? 1 : 0
+                    emitInstruction(ctx, "slt r59 r%d 1", src1_reg);        // r59 = (src1 < 1) ? 1 : 0
+                    emitInstruction(ctx, "slt r58 r0 r%d", src1_reg);       // r58 = (0 < src1) ? 1 : 0
+                    emitInstruction(ctx, "add r%d r59 r58", dest_reg);      // dest = r59 + r58 = (src1 != 0) ? 1 : 0
+                    emitInstruction(ctx, "andi r%d r%d 1", dest_reg, dest_reg);
+                } else {
+                    emitInstruction(ctx, "addi r58 r0 %d", val);
+                    emitInstruction(ctx, "sub r59 r%d r58", src1_reg);      // r59 = src1 - val
+                    emitInstruction(ctx, "slt r58 r0 r59");                 // r58 = (0 < r59) ? 1 : 0  (positive case)
+                    emitInstruction(ctx, "slt r57 r59 r0");                 // r57 = (r59 < 0) ? 1 : 0  (negative case)
+                    emitInstruction(ctx, "add r%d r58 r57", dest_reg);      // dest = r58 + r57 = (r59 != 0) ? 1 : 0
+                    emitInstruction(ctx, "andi r%d r%d 1", dest_reg, dest_reg);
+                }
+            } else {
+                int src2_reg = allocateRegister(ctx, arg2);
+                emitInstruction(ctx, "sub r59 r%d r%d", src1_reg, src2_reg); // r59 = src1 - src2
+                emitInstruction(ctx, "slt r58 r0 r59");                     // r58 = (0 < r59) ? 1 : 0  (positive case)
+                emitInstruction(ctx, "slt r57 r59 r0");                     // r57 = (r59 < 0) ? 1 : 0  (negative case)
+                emitInstruction(ctx, "add r%d r58 r57", dest_reg);          // dest = r58 + r57 = (r59 != 0) ? 1 : 0
+                emitInstruction(ctx, "andi r%d r%d 1", dest_reg, dest_reg);
+            }
+            
+        } else if (strcmp(op, "bne") == 0) {
+            // Branch if not equal: bne condition_reg label ___
+            int cond_reg = allocateRegister(ctx, arg1);
+            emitInstruction(ctx, "bne r%d r0 %s", cond_reg, arg2);  // Jump if condition is false (0)
+            
+        } else if (strcmp(op, "jump") == 0) {
+            // Unconditional jump: jump label ___ ___
+            emitInstruction(ctx, "j %s", arg1);
+            
+        } else if (strcmp(op, "label_op") == 0) {
+            // Label definition: label_op label ___ ___
+            emitLabel(ctx, "%s:", arg1);
+            
+        } else if (strcmp(op, "PARAM") == 0) {
+            // Parameter declaration - assign based on order, not name
+            int param_reg = 1 + ctx->param_counter;  // r1, r2, r3, etc.
+            
+            // Store the parameter mapping
+            for (int i = 0; i < 128; i++) {
+                if (!ctx->reg_map[i].valid) {
+                    strcpy(ctx->reg_map[i].ir_name, arg1);
+                    ctx->reg_map[i].phys_reg = param_reg;
+                    ctx->reg_map[i].valid = 1;
+                    ctx->reg_map[i].is_param = 1;
+                    break;
+                }
+            }
+            
+            ctx->param_counter++;
+            emitInstruction(ctx, "# Parameter %s in r%d", arg1, param_reg);
+            
+        } else if (strcmp(op, "MOV") == 0) {
+            // MOV src, __, dest, __
+            if (isImmediate(arg1)) {
+                int val = atoi(arg1);
+                int dest_reg = allocateRegister(ctx, arg3);
+                emitInstruction(ctx, "li r%d %d", dest_reg, val);
+            } else {
+                int src_reg = allocateRegister(ctx, arg1);
+                int dest_reg = allocateRegister(ctx, arg3);
+                emitInstruction(ctx, "move r%d r%d", dest_reg, src_reg);
+                
+                // If this is moving to a named variable, ensure we track it properly
+                // This helps fix IR inconsistencies where variables aren't properly mapped
+                if (arg3[0] && arg3[0] != 'R') {
+                    // Update mapping to ensure variable is correctly tracked
+                    for (int i = 0; i < 128; i++) {
+                        if (ctx->reg_map[i].valid && strcmp(ctx->reg_map[i].ir_name, arg3) == 0) {
+                            // Variable already tracked correctly
+                            break;
+                        }
+                        if (!ctx->reg_map[i].valid) {
+                            // Create proper tracking for this variable
+                            strcpy(ctx->reg_map[i].ir_name, arg3);
+                            ctx->reg_map[i].phys_reg = dest_reg;
+                            ctx->reg_map[i].valid = 1;
+                            break;
+                        }
                     }
                 }
             }
-        }
-        
-    } else if (strcmp(op, "ADD") == 0) {
-        // ADD src1, src2, dest, __
-        int src1_reg = allocateRegister(ctx, arg1);
-        int dest_reg = allocateRegister(ctx, arg3);
-        
-        if (isImmediate(arg2)) {
-            int val = atoi(arg2);
-            emitInstruction(ctx, "addi r%d r%d %d", dest_reg, src1_reg, val);
-        } else {
-            int src2_reg = allocateRegister(ctx, arg2);
-            emitInstruction(ctx, "add r%d r%d r%d", dest_reg, src1_reg, src2_reg);
-        }
-        
-    } else if (strcmp(op, "SUB") == 0) {
-        // SUB src1, src2, dest, __
-        int src1_reg = allocateRegister(ctx, arg1);
-        int dest_reg = allocateRegister(ctx, arg3);
-        
-        if (isImmediate(arg2)) {
-            int val = atoi(arg2);
-            emitInstruction(ctx, "subi r%d r%d %d", dest_reg, src1_reg, val);
-        } else {
-            int src2_reg = allocateRegister(ctx, arg2);
-            emitInstruction(ctx, "sub r%d r%d r%d", dest_reg, src1_reg, src2_reg);
-        }
-        
-    } else if (strcmp(op, "MUL") == 0) {
-        // MUL src1, src2, dest, __
-        int src1_reg = allocateRegister(ctx, arg1);
-        int src2_reg = allocateRegister(ctx, arg2);
-        int dest_reg = allocateRegister(ctx, arg3);
-        
-        emitInstruction(ctx, "mult r%d r%d", src1_reg, src2_reg);
-        emitInstruction(ctx, "mflo r%d", dest_reg);  // Get low part of multiplication from LO
-
-    } else if (strcmp(op, "DIV") == 0) {
-        // DIV src1, src2, dest, __
-        int src1_reg = allocateRegister(ctx, arg1);
-        int src2_reg = allocateRegister(ctx, arg2);
-        int dest_reg = allocateRegister(ctx, arg3);
-        
-        emitInstruction(ctx, "div r%d r%d", src1_reg, src2_reg);
-        emitInstruction(ctx, "mflo r%d", dest_reg);  // Get quotient from LO
-        
-    } else if (strcmp(op, "CMP") == 0) {
-        // CMP src1, src2, __, __ - Compare for branches
-        int src1_reg = allocateRegister(ctx, arg1);
-        
-        if (isImmediate(arg2)) {
-            int val = atoi(arg2);
-            if (val == 0) {
-                // Compare with zero - store result in a temporary register
-                emitInstruction(ctx, "move r59 r%d", src1_reg);         // r59 = src1 (no need to subtract 0)
+            
+        } else if (strcmp(op, "ADD") == 0) {
+            // ADD src1, src2, dest, __
+            int src1_reg = allocateRegister(ctx, arg1);
+            int dest_reg = allocateRegister(ctx, arg3);
+            
+            if (isImmediate(arg2)) {
+                int val = atoi(arg2);
+                emitInstruction(ctx, "addi r%d r%d %d", dest_reg, src1_reg, val);
             } else {
-                emitInstruction(ctx, "addi r58 r0 %d", val);            // Load immediate using addi from r0
-                emitInstruction(ctx, "sub r59 r%d r58", src1_reg); // r59 = src1 - val
+                int src2_reg = allocateRegister(ctx, arg2);
+                emitInstruction(ctx, "add r%d r%d r%d", dest_reg, src1_reg, src2_reg);
+            }
+            
+        } else if (strcmp(op, "SUB") == 0) {
+            // SUB src1, src2, dest, __
+            int src1_reg = allocateRegister(ctx, arg1);
+            int dest_reg = allocateRegister(ctx, arg3);
+            
+            if (isImmediate(arg2)) {
+                int val = atoi(arg2);
+                emitInstruction(ctx, "subi r%d r%d %d", dest_reg, src1_reg, val);
+            } else {
+                int src2_reg = allocateRegister(ctx, arg2);
+                emitInstruction(ctx, "sub r%d r%d r%d", dest_reg, src1_reg, src2_reg);
+            }
+            
+        } else if (strcmp(op, "MUL") == 0) {
+            // MUL src1, src2, dest, __
+            int src1_reg = allocateRegister(ctx, arg1);
+            int src2_reg = allocateRegister(ctx, arg2);
+            int dest_reg = allocateRegister(ctx, arg3);
+            
+            emitInstruction(ctx, "mult r%d r%d", src1_reg, src2_reg);
+            emitInstruction(ctx, "mflo r%d", dest_reg);  // Get low part of multiplication from LO
+
+        } else if (strcmp(op, "DIV") == 0) {
+            // DIV src1, src2, dest, __
+            int src1_reg = allocateRegister(ctx, arg1);
+            int src2_reg = allocateRegister(ctx, arg2);
+            int dest_reg = allocateRegister(ctx, arg3);
+            
+            emitInstruction(ctx, "div r%d r%d", src1_reg, src2_reg);
+            emitInstruction(ctx, "mflo r%d", dest_reg);  // Get quotient from LO
+            
+        } else if (strcmp(op, "CMP") == 0) {
+            // CMP src1, src2, __, __ - Compare for branches
+            int src1_reg = allocateRegister(ctx, arg1);
+            
+            if (isImmediate(arg2)) {
+                int val = atoi(arg2);
+                if (val == 0) {
+                    // Compare with zero - store result in a temporary register
+                    emitInstruction(ctx, "move r59 r%d", src1_reg);         // r59 = src1 (no need to subtract 0)
+                } else {
+                    emitInstruction(ctx, "addi r58 r0 %d", val);            // Load immediate using addi from r0
+                    emitInstruction(ctx, "sub r59 r%d r58", src1_reg); // r59 = src1 - val
+                }
+            } else {
+                int src2_reg = allocateRegister(ctx, arg2);
+                emitInstruction(ctx, "sub r59 r%d r%d", src1_reg, src2_reg);
+            }
+            
+        } else if (strcmp(op, "BR_NE") == 0) {
+            int cond_reg = allocateRegister(ctx, arg1);
+            char *branch_label_copy = strdup(arg3); 
+            emitInstruction(ctx, "bne r%d r0 %s", cond_reg, branch_label_copy); // Use bne for BR_NE
+            free(branch_label_copy); 
+
+        } else if (strcmp(op, "BR_EQ") == 0) { // <-- ADD THIS NEW BLOCK
+            int cond_reg = allocateRegister(ctx, arg1);
+            char *branch_label_copy = strdup(arg3); 
+            emitInstruction(ctx, "beq r%d r0 %s", cond_reg, branch_label_copy); // Use beq for BR_EQ
+            free(branch_label_copy);
+
+        } else if (strcmp(op, "BR_GE") == 0) {
+            // Branch if greater or equal (comparison result >= 0)
+            // This often means "if condition is false, skip the then block"
+            emitInstruction(ctx, "bgte r59 r0 %s", arg1);
+            
+        } else if (strcmp(op, "BR_LT") == 0) {
+            // Branch if less than (comparison result < 0)
+            emitInstruction(ctx, "blt r59 r0 %s", arg1);
+            
+        } else if (strcmp(op, "BR_LE") == 0) {
+            // Branch if less than or equal (comparison result <= 0)  
+            emitInstruction(ctx, "blte r59 r0 %s", arg1);
+            
+        } else if (strcmp(op, "BR_GT") == 0) {
+            // Branch if greater than (comparison result > 0)
+            emitInstruction(ctx, "bgt r59 r0 %s", arg1);
+            
+        } else if (strcmp(op, "GOTO") == 0) {
+            // Unconditional jump
+            emitInstruction(ctx, "j %s", arg1);
+            
+        } else if (strstr(op, "L") == op && op[strlen(op)-1] == ':') {
+            // Label definition
+            char clean_label[64];
+            strncpy(clean_label, op, strlen(op) - 1);
+            clean_label[strlen(op) - 1] = '\0';
+            emitInstruction(ctx, "# Label %s:", clean_label);
+            
+        } else if (strcmp(op, "CALL") == 0) {
+            // Function call - generic for any function
+            if (strcmp(arg1, "input") == 0) {
+                // Built-in input function
+                emitInstruction(ctx, "input r28");  // Read input to return register
+            } else if (strcmp(arg1, "output") == 0) {
+                // Built-in output function
+                emitInstruction(ctx, "outputreg r28"); // Output from return register
+            } else {
+                // User-defined function call
+                emitInstruction(ctx, "jal %s", arg1);  // Jump and link to function
+            }
+            
+        } else if (strcmp(op, "ARG") == 0) {
+            // Function argument setup
+            int arg_reg = allocateRegister(ctx, arg1);
+            emitInstruction(ctx, "move r28 r%d", arg_reg);  // Move arg to return register
+            
+        } else if (strcmp(op, "RETURN") == 0) {
+            // Return from function
+            if (arg1[0] && strcmp(arg1, "__") != 0) {
+                int ret_reg = allocateRegister(ctx, arg1);
+                emitInstruction(ctx, "move r28 r%d", ret_reg);  // Move return value
+                printf("DEBUG: Returning value %d from function\n", ret_reg);
+            }
+            emitInstruction(ctx, "lw r30 r31 1");    // Restore return address
+            emitInstruction(ctx, "jr r31");          // Jump to return address
+            
+        } else if (strcmp(op, "STORE_RET") == 0) {
+            // Store function return value
+            int dest_reg = allocateRegister(ctx, arg3);
+            emitInstruction(ctx, "move r%d r28", dest_reg);
+            
+        } else if (strcmp(op, "LOAD_ARRAY") == 0) {
+            // Array load: LOAD_ARRAY array, index, dest, __
+            int index_reg = allocateRegister(ctx, arg2);
+            int dest_reg = allocateRegister(ctx, arg3);
+            
+            // Generic array access - works for any array name
+            emitInstruction(ctx, "add r57 r0 r%d", index_reg);     // r57 = base + index
+            emitInstruction(ctx, "lw r%d r57 0", dest_reg);        // Load array[index]
+            
+        } else if (strcmp(op, "STORE_ARRAY") == 0) {
+            // Array store: STORE_ARRAY array, index, src, __
+            int index_reg = allocateRegister(ctx, arg2);
+            int src_reg = allocateRegister(ctx, arg3);
+            
+            // Generic array access - works for any array name
+            emitInstruction(ctx, "add r57 r0 r%d", index_reg);     // r57 = base + index
+            emitInstruction(ctx, "sw r%d r57 0", src_reg);         // Store to array[index]
+            
+        } else if (strcmp(op, "GLOBAL_ARRAY") == 0) {
+            // Global array declaration - just note it
+            emitInstruction(ctx, "# Global array %s[%s]", arg1, arg2);
+            
+        } else if (strcmp(op, "li") == 0) {
+            // LI RT, IMMEDIATE - convert to addi from r0
+            int rt_reg = allocateRegister(ctx, arg1);
+            int immediate_val = atoi(arg2); // arg2 is the immediate value string
+            if (immediate_val == 0) {
+                emitInstruction(ctx, "move r%d r0", rt_reg);
+            } else {
+                emitInstruction(ctx, "addi r%d r0 %d", rt_reg, immediate_val);
             }
         } else {
-            int src2_reg = allocateRegister(ctx, arg2);
-            emitInstruction(ctx, "sub r59 r%d r%d", src1_reg, src2_reg);
+            // Only emit unknown IR comment for truly unknown IRs
+            if (strcmp(op, "allocaMemVar") == 0) {
+                // Do nothing, skip
+            } else {
+                emitInstruction(ctx, "# Unknown IR: %s", line);
+            }
         }
-        
-    } else if (strcmp(op, "BR_NE") == 0) {
-        int cond_reg = allocateRegister(ctx, arg1);
-        char *branch_label_copy = strdup(arg3); 
-        emitInstruction(ctx, "bne r%d r0 %s", cond_reg, branch_label_copy); // Use bne for BR_NE
-        free(branch_label_copy); 
-
-    } else if (strcmp(op, "BR_EQ") == 0) { // <-- ADD THIS NEW BLOCK
-        int cond_reg = allocateRegister(ctx, arg1);
-        char *branch_label_copy = strdup(arg3); 
-        emitInstruction(ctx, "beq r%d r0 %s", cond_reg, branch_label_copy); // Use beq for BR_EQ
-        free(branch_label_copy);
-
-    } else if (strcmp(op, "BR_GE") == 0) {
-        // Branch if greater or equal (comparison result >= 0)
-        // This often means "if condition is false, skip the then block"
-        emitInstruction(ctx, "bgte r59 r0 %s", arg1);
-        
-    } else if (strcmp(op, "BR_LT") == 0) {
-        // Branch if less than (comparison result < 0)
-        emitInstruction(ctx, "blt r59 r0 %s", arg1);
-        
-    } else if (strcmp(op, "BR_LE") == 0) {
-        // Branch if less than or equal (comparison result <= 0)  
-        emitInstruction(ctx, "blte r59 r0 %s", arg1);
-        
-    } else if (strcmp(op, "BR_GT") == 0) {
-        // Branch if greater than (comparison result > 0)
-        emitInstruction(ctx, "bgt r59 r0 %s", arg1);
-        
-    } else if (strcmp(op, "GOTO") == 0) {
-        // Unconditional jump
-        emitInstruction(ctx, "j %s", arg1);
-        
-    } else if (strstr(op, "L") == op && op[strlen(op)-1] == ':') {
-        // Label definition
-        char clean_label[64];
-        strncpy(clean_label, op, strlen(op) - 1);
-        clean_label[strlen(op) - 1] = '\0';
-        emitInstruction(ctx, "# Label %s:", clean_label);
-        
-    } else if (strcmp(op, "CALL") == 0) {
-        // Function call - generic for any function
-        if (strcmp(arg1, "input") == 0) {
-            // Built-in input function
-            emitInstruction(ctx, "input r28");  // Read input to return register
-        } else if (strcmp(arg1, "output") == 0) {
-            // Built-in output function
-            emitInstruction(ctx, "outputreg r28"); // Output from return register
-        } else {
-            // User-defined function call
-            emitInstruction(ctx, "jal %s", arg1);  // Jump and link to function
-        }
-        
-    } else if (strcmp(op, "ARG") == 0) {
-        // Function argument setup
-        int arg_reg = allocateRegister(ctx, arg1);
-        emitInstruction(ctx, "move r28 r%d", arg_reg);  // Move arg to return register
-        
-    } else if (strcmp(op, "RETURN") == 0) {
-        // Return from function
-        if (arg1[0] && strcmp(arg1, "__") != 0) {
-            int ret_reg = allocateRegister(ctx, arg1);
-            emitInstruction(ctx, "move r28 r%d", ret_reg);  // Move return value
-            printf("DEBUG: Returning value %d from function\n", ret_reg);
-        }
-        emitInstruction(ctx, "lw r30 r31 1");    // Restore return address
-        emitInstruction(ctx, "jr r31");          // Jump to return address
-        
-    } else if (strcmp(op, "STORE_RET") == 0) {
-        // Store function return value
-        int dest_reg = allocateRegister(ctx, arg3);
-        emitInstruction(ctx, "move r%d r28", dest_reg);
-        
-    } else if (strcmp(op, "LOAD_ARRAY") == 0) {
-        // Array load: LOAD_ARRAY array, index, dest, __
-        int index_reg = allocateRegister(ctx, arg2);
-        int dest_reg = allocateRegister(ctx, arg3);
-        
-        // Generic array access - works for any array name
-        emitInstruction(ctx, "add r57 r0 r%d", index_reg);     // r57 = base + index
-        emitInstruction(ctx, "lw r%d r57 0", dest_reg);        // Load array[index]
-        
-    } else if (strcmp(op, "STORE_ARRAY") == 0) {
-        // Array store: STORE_ARRAY array, index, src, __
-        int index_reg = allocateRegister(ctx, arg2);
-        int src_reg = allocateRegister(ctx, arg3);
-        
-        // Generic array access - works for any array name
-        emitInstruction(ctx, "add r57 r0 r%d", index_reg);     // r57 = base + index
-        emitInstruction(ctx, "sw r%d r57 0", src_reg);         // Store to array[index]
-        
-    } else if (strcmp(op, "GLOBAL_ARRAY") == 0) {
-        // Global array declaration - just note it
-        emitInstruction(ctx, "# Global array %s[%s]", arg1, arg2);
-        
-    } else if (strcmp(op, "li") == 0) {
-        // LI RT, IMMEDIATE - convert to addi from r0
-        int rt_reg = allocateRegister(ctx, arg1);
-        int immediate_val = atoi(arg2); // arg2 is the immediate value string
-        if (immediate_val == 0) {
-            emitInstruction(ctx, "move r%d r0", rt_reg);
-        } else {
-            emitInstruction(ctx, "addi r%d r0 %d", rt_reg, immediate_val);
-        }
-    } else {
-        // Unknown instruction - emit as comment
-        emitInstruction(ctx, "# Unknown IR: %s", line);
-    }
+    } while (reprocess);
 }
 
 // Main assembly generation function - generic for any C- program

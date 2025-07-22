@@ -359,34 +359,18 @@ static void generate_alloca_mem_var(const char *scope, const char *var_name) {
 // Generate memory allocation for arrays (allocaMemVet)
 static void generate_alloca_mem_vet(const char *scope, const char *var_name, int size) {
     if (outputFile) {
-        fprintf(outputFile, "allocaMemVet %s %s %d\n", scope, var_name, size);
+        fprintf(outputFile, "allocaMemVet %s %s ___\n", scope, var_name);
     }
 }
 
 // Generate load variable from memory to temporary register (loadVar)
-/*static char* generate_load_var(const char *scope, const char *var_name) {
-    char *temp_reg = allocate_temp_register();
-    emit_buffered("loadVar %s %s %s", scope, var_name, temp_reg);
-    return temp_reg;
-}*/
 static char* generate_load_var(const char *scope, const char *var_name) {
     char *temp_reg = allocate_temp_register();
-    VariableInfo *var_info = get_variable_info(var_name); // Get info from table
-    if (var_info && var_info->stack_offset >= 0) {
-        emit_buffered("loadVar %s %d %s", var_info->name, var_info->stack_offset, temp_reg); // New IR: loadVar var_name offset dest_reg
-    } else {
-        fprintf(stderr, "Warning: Variable %s not found or no offset assigned. Emitting generic loadVar.\n", var_name);
-        emit_buffered("loadVar %s %s %s", scope, var_name, temp_reg); // Fallback to old for now
-    }
+    emit_buffered("loadVar %s %s %s", scope, var_name, temp_reg);
     return temp_reg;
 }
 
 // Generate load array element to temporary register (loadVet)
-/*static char* generate_load_vet(const char *base_reg, const char *index_reg) {
-    char *temp_reg = allocate_temp_register();
-    emit_buffered("loadVet %s %s ___", base_reg, temp_reg);
-    return temp_reg;
-}*/
 static char* generate_load_vet(const char *array_name, TreeNode *index_tree) {
     char *dest_reg = allocate_temp_register();
     char *index_temp_reg = generate_expression_code(index_tree);
@@ -403,34 +387,12 @@ static char* generate_load_vet(const char *array_name, TreeNode *index_tree) {
 
 // Generate store temporary register to variable memory (storeVar)
 static void generate_store_var(const char *temp_reg, const char *var_name, const char *scope) {
-    VariableInfo *var_info = get_variable_info(var_name); // Get info from table
-    if (var_info && var_info->stack_offset >= 0) {
-        emit_buffered("storeVar %s %s %d", temp_reg, var_info->name, var_info->stack_offset); // New IR: storeVar src_reg var_name offset
-    } else {
-        fprintf(stderr, "Warning: Variable %s not found or no offset assigned. Emitting generic storeVar.\n", var_name);
-        emit_buffered("storeVar %s %s %s", temp_reg, var_name, scope); // Fallback
-    }
-}
-
-// Generate store temporary register to array element (storeVet)
-/*static void generate_store_vet(const char *temp_reg, const char *addr_reg) {
-    emit_buffered("storeVet %s %s ___", temp_reg, addr_reg);
-}*/
-static void generate_store_vet(const char *src_reg, const char *array_name, TreeNode *index_tree) {
-    char *index_temp_reg = generate_expression_code(index_tree);
-    VariableInfo *array_info = get_variable_info(array_name);
-    if (array_info && array_info->stack_offset >= 0) {
-        emit_buffered("storeVet %s %s %d %s", src_reg, array_info->name, array_info->stack_offset, index_temp_reg);
-    } else {
-        fprintf(stderr, "Warning: Array '%s' not found or no offset assigned. Emitting generic storeVet.\n", array_name);
-        emit_buffered("storeVet %s %s %d %s", src_reg, array_name, 0, index_temp_reg);
-    }
-    if (index_temp_reg && index_temp_reg[0] == 't') release_temp_register(index_temp_reg);
+    emit_buffered("storeVar %s %s %s", temp_reg, var_name, scope);
 }
 
 // Generate move operation between temporary registers
 static void generate_move(const char *src_reg, const char *dst_reg) {
-    emit_buffered("move %s %s ___", src_reg, dst_reg);
+    emit_buffered("move %s %s ___", dst_reg, src_reg);
 }
 
 // ============================================================================
@@ -1208,7 +1170,7 @@ static void generateFunctions(TreeNode *tree) {
     if (tree->nodekind == ExpK && tree->kind.exp == TypeK) {
         TreeNode *actual_decl = tree->child[0];
         if (actual_decl != NULL && actual_decl->kind.exp == FuncK) {
-            // Inicializa para nova função
+            // Initialize for new function
             instruction_buffer_count = 0;
             local_vars_count = 0;
             param_count = 0;
@@ -1216,101 +1178,61 @@ static void generateFunctions(TreeNode *tree) {
             labelCount = 0;
             strncpy(current_func_name_codegen, actual_decl->attr.name, MAX_IDENTIFIER_LEN -1);
             current_func_name_codegen[MAX_IDENTIFIER_LEN-1] = '\0';
+            release_all_temps();
+            stats.total_functions++;
 
-            // Coleta parâmetros da função
+            // Collect parameters
             TreeNode *param_node = actual_decl->child[0];
             while (param_node != NULL && param_count < MAX_FUNC_PARAMS) {
                 if (param_node->kind.exp == ParamK) {
-                     strncpy(param_list[param_count++], param_node->attr.name, MAX_IDENTIFIER_LEN -1);
-                     param_list[param_count-1][MAX_IDENTIFIER_LEN-1] = '\0';
+                    strncpy(param_list[param_count++], param_node->attr.name, MAX_IDENTIFIER_LEN -1);
+                    param_list[param_count-1][MAX_IDENTIFIER_LEN-1] = '\0';
                 } else if (param_node->kind.exp == TypeK && param_node->child[0] != NULL && param_node->child[0]->kind.exp == ParamK) {
-                    // Parâmetro pode estar aninhado sob TypeK
-                     strncpy(param_list[param_count++], param_node->child[0]->attr.name, MAX_IDENTIFIER_LEN -1);
-                     param_list[param_count-1][MAX_IDENTIFIER_LEN-1] = '\0';
+                    strncpy(param_list[param_count++], param_node->child[0]->attr.name, MAX_IDENTIFIER_LEN -1);
+                    param_list[param_count-1][MAX_IDENTIFIER_LEN-1] = '\0';
                 }
                 param_node = param_node->sibling;
             }
 
-            // 2. Reset stack frame size for the new function
-            func_stack_frame_size = 0; // Reset at function start
-            current_stack_offset = 0;  // Also reset current_stack_offset at the very beginning of processing a function
-
-            // 3. First pass: Process local variable declarations and calculate their sizes.
-            // This populates local_vars_list and updates 'current_stack_offset'.
-            if (actual_decl->child[1] != NULL) { // Check if function has a body
-                TreeNode *stmt = actual_decl->child[1]; // Get the first statement in the function body
-                while (stmt != NULL) {
-                    // Check for variable declarations within the function body
-                    if (stmt->nodekind == ExpK && stmt->kind.exp == TypeK && stmt->child[0] != NULL) {
-                        TreeNode *var_decl = stmt->child[0];
-                        if (var_decl->kind.exp == VarK) { // Simple variable declaration
-                            add_local_var(var_decl->attr.name);
-                            add_variable_info(var_decl->attr.name, TYPE_INT, 0); // 0 for not a parameter
-                        } else if (var_decl->kind.exp == IdK && var_decl->child[0] != NULL) { // Array declaration
-                            int array_size = 0;
-                            if (var_decl->child[0]->kind.exp == ConstK) {
-                                array_size = var_decl->child[0]->attr.val;
-                            }
-                            add_local_var(var_decl->attr.name);
-                            add_variable_info(var_decl->attr.name, TYPE_ARRAY_INT, array_size); // Pass array_size for type
-                        }
-                    }
-                    stmt = stmt->sibling; // Move to the next statement/declaration
-                }
-            }
-            // After processing all local variable declarations (first pass), current_stack_offset
-            // holds the total size for local variables (sum of `size` in VariableInfo entries).
-            func_stack_frame_size = current_stack_offset; // This is the size used by locals.
-
-            // 4. Assign stack offsets to parameters.
-            // Reset current_stack_offset to 0 for parameters (relative to the base of the function's stack frame)
-            current_stack_offset = 0; 
-            for(int i = 0; i < param_count; i++) {
-                // Here, `add_variable_info` assigns a `stack_offset` to each parameter.
-                // It increments `current_stack_offset` (which is now just for parameters here).
-                add_variable_info(param_list[i], TYPE_INT, 1); // 1 for parameter
-            }
-            func_stack_frame_size += current_stack_offset; // Add parameter size to total frame size.
-
-            // 5. Calculate total stack frame size: RA slot + parameter slots + local variable slots.
-            // One slot for the return address (RA) is always saved.
-            func_stack_frame_size += 1; // For the return address itself.
-
-            // The total stack size should be rounded up to a multiple of 4 (for word alignment)
-            // assuming stack slots are 4 bytes.
-            if (func_stack_frame_size % 4 != 0) {
-                func_stack_frame_size += (4 - (func_stack_frame_size % 4));
-            }
-
-            // 6. Emit the `funInicio` IR instruction with the calculated stack size.
-            // This replaces the simple `funInicio %s ___ ___` line.
-            char prologue_ir[512];
-            snprintf(prologue_ir, sizeof(prologue_ir), "funInicio %s %d %d", 
-                     current_func_name_codegen, param_count, func_stack_frame_size);
-            emit_buffered("%s", prologue_ir); // Emit the modified funInicio IR to the buffer
-            
-
-            
-            // Gera corpo da função (comando composto)
-            // O corpo é actual_decl->child[1] e seus siblings
-            current_stack_offset = 0; // Reset for load/store's internal use for actual offsets within the loop below.
+            // Collect local variables
             if (actual_decl->child[1] != NULL) {
                 TreeNode *stmt = actual_decl->child[1];
                 while (stmt != NULL) {
-                    // Skip variable declarations (already processed for size) and generate code for statements
-                    if (!(stmt->nodekind == ExpK && stmt->kind.exp == TypeK && stmt->child[0] != NULL && stmt->child[0]->kind.exp == VarK)) {
-                        generate_code_single(stmt); // Process each statement in the function body
+                    if (stmt->nodekind == ExpK && stmt->kind.exp == TypeK && stmt->child[0] != NULL) {
+                        TreeNode *var_decl = stmt->child[0];
+                        if (var_decl->kind.exp == VarK) {
+                            add_local_var(var_decl->attr.name);
+                        } else if (var_decl->kind.exp == IdK && var_decl->child[0] != NULL) {
+                            add_local_var(var_decl->attr.name);
+                        }
                     }
                     stmt = stmt->sibling;
                 }
             }
 
-            // Adiciona return implícito para funções void se não já presente na última instrução
-            // Esta verificação é complicada; por ora, assume análise semântica ou programador garante returns.
-            // Ou, sempre adiciona se void e última instrução não é RETURN_VOID.
-            // Os IRs de exemplo têm returns explícitos.
+            // 1. Emit allocaMemVar for params
+            for (int i = 0; i < param_count; i++) {
+                emit_buffered("allocaMemVar %s %s ___", current_func_name_codegen, param_list[i]);
+            }
+            // 2. Emit allocaMemVar for locals
+            for (int i = 0; i < local_vars_count; i++) {
+                emit_buffered("allocaMemVar %s %s ___", current_func_name_codegen, local_vars_list[i]);
+            }
+            // 3. Emit funInicio
+            emit_buffered("funInicio %s ___ ___", current_func_name_codegen);
 
-            flush_function_buffer(); // Escreve função em buffer para arquivo
+            // 4. Emit function body
+            if (actual_decl->child[1] != NULL) {
+                TreeNode *stmt = actual_decl->child[1];
+                while (stmt != NULL) {
+                    if (!(stmt->nodekind == ExpK && stmt->kind.exp == TypeK && stmt->child[0] != NULL && stmt->child[0]->kind.exp == VarK)) {
+                        generate_code_single(stmt);
+                    }
+                    stmt = stmt->sibling;
+                }
+            }
+            // 5. Emit funFim via flush_function_buffer
+            flush_function_buffer();
         }
     }
     
@@ -1378,7 +1300,7 @@ void codeGen(TreeNode *syntaxTree, char * irOutputFile, const char *sourceFilena
         if (current->nodekind == ExpK && current->kind.exp == TypeK) {
             TreeNode *actual_decl = current->child[0];
             if (actual_decl != NULL && actual_decl->kind.exp == FuncK) {
-                // Inicializa para nova função
+                // Initialize for new function
                 instruction_buffer_count = 0;
                 local_vars_count = 0;
                 param_count = 0;
@@ -1386,66 +1308,61 @@ void codeGen(TreeNode *syntaxTree, char * irOutputFile, const char *sourceFilena
                 labelCount = 0;
                 strncpy(current_func_name_codegen, actual_decl->attr.name, MAX_IDENTIFIER_LEN -1);
                 current_func_name_codegen[MAX_IDENTIFIER_LEN-1] = '\0';
-
-                // Inicializa sistema aprimorado de temporários para a nova função
                 release_all_temps();
-                
-                // Coleta estatísticas de função
                 stats.total_functions++;
 
-                // Coleta parâmetros da função
+                // Collect parameters
                 TreeNode *param_node = actual_decl->child[0];
                 while (param_node != NULL && param_count < MAX_FUNC_PARAMS) {
                     if (param_node->kind.exp == ParamK) {
-                         strncpy(param_list[param_count++], param_node->attr.name, MAX_IDENTIFIER_LEN -1);
-                         param_list[param_count-1][MAX_IDENTIFIER_LEN-1] = '\0';
+                        strncpy(param_list[param_count++], param_node->attr.name, MAX_IDENTIFIER_LEN -1);
+                        param_list[param_count-1][MAX_IDENTIFIER_LEN-1] = '\0';
                     } else if (param_node->kind.exp == TypeK && param_node->child[0] != NULL && param_node->child[0]->kind.exp == ParamK) {
-                        // Parâmetro pode estar aninhado sob TypeK
-                         strncpy(param_list[param_count++], param_node->child[0]->attr.name, MAX_IDENTIFIER_LEN -1);
-                         param_list[param_count-1][MAX_IDENTIFIER_LEN-1] = '\0';
+                        strncpy(param_list[param_count++], param_node->child[0]->attr.name, MAX_IDENTIFIER_LEN -1);
+                        param_list[param_count-1][MAX_IDENTIFIER_LEN-1] = '\0';
                     }
                     param_node = param_node->sibling;
                 }
-                
-                // First pass: Process variable declarations and generate memory allocation
+
+                // Collect local variables
                 if (actual_decl->child[1] != NULL) {
                     TreeNode *stmt = actual_decl->child[1];
                     while (stmt != NULL) {
-                        // Process variable declarations
                         if (stmt->nodekind == ExpK && stmt->kind.exp == TypeK && stmt->child[0] != NULL) {
                             TreeNode *var_decl = stmt->child[0];
                             if (var_decl->kind.exp == VarK) {
-                                // Simple variable declaration
-                                generate_alloca_mem_var(current_func_name_codegen, var_decl->attr.name);
                                 add_local_var(var_decl->attr.name);
                             } else if (var_decl->kind.exp == IdK && var_decl->child[0] != NULL) {
-                                // Array declaration
-                                int array_size = -1;
-                                if (var_decl->child[0]->kind.exp == ConstK) {
-                                    array_size = var_decl->child[0]->attr.val;
-                                }
-                                generate_alloca_mem_vet(current_func_name_codegen, var_decl->attr.name, array_size);
                                 add_local_var(var_decl->attr.name);
                             }
                         }
                         stmt = stmt->sibling;
                     }
                 }
-                
-                // Second pass: Generate code for function body
-                // O corpo é actual_decl->child[1] e seus siblings
+
+                // 1. Emit allocaMemVar for params
+                for (int i = 0; i < param_count; i++) {
+                    emit_buffered("allocaMemVar %s %s ___", current_func_name_codegen, param_list[i]);
+                }
+                // 2. Emit allocaMemVar for locals
+                for (int i = 0; i < local_vars_count; i++) {
+                    emit_buffered("allocaMemVar %s %s ___", current_func_name_codegen, local_vars_list[i]);
+                }
+                // 3. Emit funInicio
+                emit_buffered("funInicio %s ___ ___", current_func_name_codegen);
+
+                // 4. Emit function body
                 if (actual_decl->child[1] != NULL) {
                     TreeNode *stmt = actual_decl->child[1];
                     while (stmt != NULL) {
-                        // Skip variable declarations (already processed) and generate code for statements
                         if (!(stmt->nodekind == ExpK && stmt->kind.exp == TypeK && stmt->child[0] != NULL && stmt->child[0]->kind.exp == VarK)) {
-                            generate_code_single(stmt); // Processa cada comando no corpo da função (sem siblings)
+                            generate_code_single(stmt);
                         }
                         stmt = stmt->sibling;
                     }
                 }
-
-                flush_function_buffer(); // Escreve função em buffer para arquivo
+                // 5. Emit funFim via flush_function_buffer
+                flush_function_buffer();
             }
         }
         current = current->sibling;
@@ -1861,4 +1778,10 @@ void generateAssemblyFromIR(const char *irOutputFile, const char *sourceFilename
     
     printf("✓ Código Binário limpo gerado em %s.bin\n", baseFilename);
     printf("✓ Código Binário comentado gerado em %s.binbd\n", baseFilename);
+}
+
+static void generate_store_vet(const char *src_reg, const char *array_name, TreeNode *index_tree) {
+    char *index_temp_reg = generate_expression_code(index_tree);
+    emit_buffered("storeVet %s %s %s %s", src_reg, array_name, index_temp_reg, current_func_name_codegen);
+    if (index_temp_reg && index_temp_reg[0] == 't') release_temp_register(index_temp_reg);
 }

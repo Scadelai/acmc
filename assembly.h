@@ -3,6 +3,8 @@
 
 #include "globals.h"
 #include <stdio.h>
+#include <stdbool.h>
+#define MAX_FUNC_VARS 64
 
 // Maximum limits for assembly generation
 #ifndef MAX_REGISTERS
@@ -134,6 +136,13 @@ typedef struct {
     int is_global;        // 1 if this is a global variable
 } RegisterMapping;
 
+// Variable offset entry for function variables
+typedef struct {
+    char scope[64];
+    char name[64];
+    int offset;
+} VarOffsetEntry;
+
 // Assembly generation context - generic for any C- program
 typedef struct {
     FILE *output;
@@ -144,13 +153,9 @@ typedef struct {
     int label_counter;             // For generating unique labels
     int param_counter;             // Track parameter order in current function
     int current_stack_slots;       // Stack slots allocated for current function
-    int var_offset_map_count;      // Number of entries in current_function_vars
-    struct {
-        char name[64];
-        int memory_offset;
-        int is_array;
-        int array_size;
-    } current_function_vars[128];
+    int var_offset_map_count;
+    bool in_function;
+    VarOffsetEntry var_offsets[MAX_FUNC_VARS];
 } AssemblyContext;
 
 // Main assembly generation functions
