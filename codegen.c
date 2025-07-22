@@ -938,8 +938,8 @@ static void generate_statement_code(TreeNode *tree) {
                     break;
 
                 case IfK: // Conditional if-then-else
-                    char *label_false = newLabel(); // Label for the 'else' part or end of if (if no else)
-                    char *label_end_if = newLabel(); // Label for the end of the entire if-else construct
+                    label_false = newLabel(); // Label for the 'else' part or end of if (if no else)
+                    label_end_if = newLabel(); // Label for the end of the entire if-else construct
                     
                     // Generate condition evaluation
                     if (tree->child[0]->kind.exp == OpK) {
