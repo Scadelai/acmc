@@ -892,7 +892,7 @@ static void generate_statement_code(TreeNode *tree) {
 
     char *val_temp, *idx_temp, *base_temp, *addr_temp, *cond_temp;
     char *label1, *label2;
-
+    char *label_false = NULL, *label_end_if = NULL;
     switch (tree->nodekind) {
         case StmtK:
             switch (tree->kind.stmt) {
