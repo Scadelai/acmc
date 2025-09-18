@@ -26,4 +26,7 @@ char *newTemp(void);
 char *newLabel(void);
 char *generate_expression_code(TreeNode *tree);
 
+// Reset codegen state for new compilation
+void codegen_reset(void);
+
 #endif

@@ -3,6 +3,7 @@
 #include "parse.h"
 #include "analyze.h"
 #include "codegen.h"
+#include "symtab.h"
 
 // Incluir stdio e string para operações com arquivos e strings
 #include <stdio.h>

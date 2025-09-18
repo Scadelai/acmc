@@ -1,0 +1,19 @@
+/* Simple parameter test - just output the parameters directly */
+
+int test_params(int param1, int param2) {
+    output(param1);
+    output(param2);
+    return param1;
+}
+
+void main(void) {
+    int a;
+    int b;
+    
+    a = input();
+    output(a);  /* Should see input value */
+    b = input();
+    output(b);  /* Should see input value */
+    
+    test_params(a, b);  /* Should see the same values again */
+}

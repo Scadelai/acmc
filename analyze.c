@@ -204,3 +204,9 @@ Inicia a verificação de tipos na árvore sintática utilizando uma travessia p
 void typeCheck(TreeNode *syntax_tree) {
   traverse(syntax_tree, checkNode, nullProc);
 }
+
+// Reset analysis state for new compilation
+void analyze_reset(void) {
+  location = 0;
+  scope = "global";
+}

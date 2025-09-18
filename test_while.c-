@@ -1,0 +1,17 @@
+/* Simple while test */
+void main(void) {
+    int i;
+    int n;
+    
+    i = 1;
+    n = 3;
+    
+    output(888);  /* Start marker */
+    
+    while (i <= n) {
+        output(i);
+        i = i + 1;
+    }
+    
+    output(999);  /* End marker */
+}

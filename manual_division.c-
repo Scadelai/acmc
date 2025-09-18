@@ -1,0 +1,30 @@
+/* Manual Division Program - All logic in main
+ * Performs integer division using repeated subtraction
+ * Calculates quotient and remainder without using division operator
+ */
+
+void main(void) {
+    int a;
+    int b;
+    int quotient;
+    int remainder;
+    
+    a = input();
+    output(a);
+    b = input();
+    output(b);
+    
+    if (b == 0) {
+        output(999); /* Error: division by zero */
+    } else {
+        quotient = 0;
+        remainder = a;
+        
+        while (remainder >= b) {
+            remainder = remainder - b;
+            quotient = quotient + 1;
+        }
+        
+        output(quotient);
+    }
+}

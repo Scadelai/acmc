@@ -1,0 +1,12 @@
+void main(void)
+{
+    /* This should generate: 
+       li r4 0
+       li r5 0  
+       set r6 r4 r5
+       outputreg r6
+    */
+    output(999);  /* Marker: test starts */
+    
+    /* We need to trick the compiler into generating direct register operations */
+}

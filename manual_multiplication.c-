@@ -1,0 +1,30 @@
+/* Manual Multiplication Program - All logic in main
+ * Performs integer multiplication using repeated addition
+ * Multiplies two numbers without using multiplication operator
+ */
+
+void main(void) {
+    int x;
+    int y;
+    int result;
+    int counter;
+    
+    x = input();
+    output(x);
+    y = input();
+    output(y);
+    
+    if (y < 0) {
+        output(888); /* Error: negative multiplier not supported */
+    } else {
+        result = 0;
+        counter = 0;
+        
+        while (counter < y) {
+            result = result + x;
+            counter = counter + 1;
+        }
+        
+        output(result);
+    }
+}

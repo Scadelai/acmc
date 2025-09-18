@@ -5,7 +5,7 @@ OBJS = acmc.tab.o lex.yy.o analyze.o symtab.o util.o main.o codegen.o assembly.o
 all: $(BIN)
 
 $(BIN): $(OBJS)
-	$(CC) -o $(BIN) $(OBJS) -lfl
+	$(CC) -o $(BIN) $(OBJS)
 
 lex.yy.o: acmc.l
 	flex acmc.l

@@ -1,0 +1,276 @@
+
+Syntax tree:
+
+  Type: INT
+    Func: gcd
+      Type: INT
+        Param: u
+      Type: INT
+        Param: v
+      Call func: output
+        Id: u
+      Call func: output
+        Id: v
+      If
+        Oper: ==
+          Id: v
+          Const: 0
+        Return
+          Id: u
+        Return
+          Call func: gcd
+            Id: v
+            Oper: -
+              Id: u
+              Oper: *
+                Oper: /
+                  Id: u
+                  Id: v
+                Id: v
+  Type: VOID
+    Func: main
+      Type: VOID
+      Type: INT
+        Var: x
+      Type: INT
+        Var: y
+      Assign: 
+        Id: x
+        Call func: input
+      Call func: output
+        Id: x
+      Assign: 
+        Id: y
+        Call func: input
+      Call func: output
+        Id: y
+      Call func: output
+        Call func: gcd
+          Id: x
+          Id: y
+
+Symbol table:
+
+----------------------------------------------------------------------------------------
+Name       Scope      Type     Data Type   Lines
+----------------------------------------------------------------------------------------
+main       global      func     VOID        13 
+input      global      func     INT          0  15  17 
+u          gcd         var      INT          4   6   8   9   9 
+output     global      func     VOID         0   6   7  16  18  19 
+v          gcd         var      INT          4   7   8   9   9   9 
+x          main        var      INT         14  15  16  19 
+y          main        var      INT         14  17  18  19 
+gcd        global      func     INT          4   9  19 
+Register pool initialized with 32 registers (28 general purpose)
+=== Enhanced C-minus Compiler IR Generation ===
+Register Pool: 64 registers (R0-R63)
+Special Registers: R31(return), R62(lo), R63(hi)
+General Purpose: R1-R60 (60 registers available)
+Scope Management: Enabled
+Type System: Enhanced IR with type information
+Memory Management: Stack-based with alignment
+=============================================
+
+
+=== Compilation Statistics ===
+Total Instructions: 52
+Total Functions: 2
+Total Labels: 2
+Total Temporaries: 0
+Optimization Count: 0
+Maximum Stack Offset: 0 bytes
+Variables Tracked: 0
+Registers in Use: 1/32
+Register Efficiency: 98.3%
+============================
+
+=== ESTATÍSTICAS DE COMPILAÇÃO ===
+Total de instruções geradas: 52
+Total de temporários utilizados: 0
+Total de rótulos criados: 2
+Total de funções processadas: 2
+Otimizações aplicadas: 0
+===================================
+Validando código IR gerado...
+✓ Código IR válido gerado com sucesso!
+Gerando código Assembly...
+DEBUG: IR line received: 'allocaMemVar gcd u ___'
+DEBUG: IR line received: 'allocaMemVar gcd v ___'
+DEBUG: IR line received: 'funInicio gcd ___ ___'
+DEBUG: allocaMemVar gcd.u assigned offset 1 (from pending)
+DEBUG: allocaMemVar gcd.v assigned offset 2 (from pending)
+DEBUG: IR line received: 'loadVar gcd u t0'
+DEBUG: var_offsets before prologue for gcd:
+  [0] scope='gcd' name='u' offset=1
+  [1] scope='gcd' name='v' offset=2
+DEBUG: Prologue for gcd, stack size = 3
+DEBUG: After prologue, reparsed op='loadVar' arg1='gcd' arg2='u' arg3='t0' arg4=''
+DEBUG: loadVar arg1='|gcd|' arg2='|u|'
+DEBUG: loadVar gcd.u offset 1
+DEBUG: IR line received: 'param t0 ___ ___'
+DEBUG: IR line received: 'call output 1 ___'
+DEBUG: IR line received: 'loadVar gcd v t0'
+DEBUG: loadVar arg1='|gcd|' arg2='|v|'
+DEBUG: loadVar gcd.v offset 2
+DEBUG: IR line received: 'param t0 ___ ___'
+DEBUG: IR line received: 'call output 1 ___'
+DEBUG: IR line received: 'loadVar gcd v t0'
+DEBUG: loadVar arg1='|gcd|' arg2='|v|'
+DEBUG: loadVar gcd.v offset 2
+DEBUG: IR line received: 'BR_NE t0 0 L0'
+DEBUG: IR line received: 'loadVar gcd u t0'
+DEBUG: loadVar arg1='|gcd|' arg2='|u|'
+DEBUG: loadVar gcd.u offset 1
+DEBUG: IR line received: 'move r28 t0 ___'
+DEBUG: Moved value from t0 to r28 (r28 <- r4)
+DEBUG: IR line received: 'jump L1 ___ ___'
+DEBUG: IR line received: 'label_op L0 ___ ___'
+DEBUG: IR line received: 'loadVar gcd v t0'
+DEBUG: loadVar arg1='|gcd|' arg2='|v|'
+DEBUG: loadVar gcd.v offset 2
+DEBUG: IR line received: 'param t0 ___ ___'
+DEBUG: IR line received: 'loadVar gcd u t0'
+DEBUG: loadVar arg1='|gcd|' arg2='|u|'
+DEBUG: loadVar gcd.u offset 1
+DEBUG: IR line received: 'loadVar gcd u t1'
+DEBUG: loadVar arg1='|gcd|' arg2='|u|'
+DEBUG: loadVar gcd.u offset 1
+DEBUG: IR line received: 'loadVar gcd v t2'
+DEBUG: loadVar arg1='|gcd|' arg2='|v|'
+DEBUG: loadVar gcd.v offset 2
+DEBUG: IR line received: 'div t1 t2 t3'
+DEBUG: IR line received: 'loadVar gcd v t1'
+DEBUG: loadVar arg1='|gcd|' arg2='|v|'
+DEBUG: loadVar gcd.v offset 2
+DEBUG: IR line received: 'mult t3 t1 t2'
+DEBUG: IR line received: 'sub t0 t2 t1'
+DEBUG: IR line received: 'param t1 ___ ___'
+DEBUG: IR line received: 'call gcd 2 ___'
+DEBUG: IR line received: 'move t0 $rf ___'
+DEBUG: Moved value from $rf to t0 (r4 <- r28)
+DEBUG: IR line received: 'move r28 t0 ___'
+DEBUG: Moved value from t0 to r28 (r28 <- r4)
+DEBUG: IR line received: 'label_op L1 ___ ___'
+DEBUG: IR line received: 'funFim gcd ___ ___'
+DEBUG: IR line received: ''
+DEBUG: IR line received: 'allocaMemVar main x ___'
+DEBUG: IR line received: 'allocaMemVar main y ___'
+DEBUG: IR line received: 'funInicio main ___ ___'
+DEBUG: allocaMemVar main.x assigned offset 1 (from pending)
+DEBUG: allocaMemVar main.y assigned offset 2 (from pending)
+DEBUG: IR line received: 'call input 0 ___'
+DEBUG: var_offsets before prologue for main:
+  [0] scope='main' name='x' offset=1
+  [1] scope='main' name='y' offset=2
+DEBUG: Prologue for main, stack size = 3
+DEBUG: After prologue, reparsed op='call' arg1='input' arg2='0' arg3='___' arg4=''
+DEBUG: IR line received: 'move t0 $rf ___'
+DEBUG: Moved value from $rf to t0 (r4 <- r28)
+DEBUG: IR line received: 'storeVar t0 x main'
+DEBUG: storeVar arg2='|x|' arg3='|main|'
+DEBUG: storeVar main.x offset 1
+DEBUG: IR line received: 'loadVar main x t0'
+DEBUG: loadVar arg1='|main|' arg2='|x|'
+DEBUG: loadVar main.x offset 1
+DEBUG: IR line received: 'param t0 ___ ___'
+DEBUG: IR line received: 'call output 1 ___'
+DEBUG: IR line received: 'call input 0 ___'
+DEBUG: IR line received: 'move t0 $rf ___'
+DEBUG: Moved value from $rf to t0 (r4 <- r28)
+DEBUG: IR line received: 'storeVar t0 y main'
+DEBUG: storeVar arg2='|y|' arg3='|main|'
+DEBUG: storeVar main.y offset 2
+DEBUG: IR line received: 'loadVar main y t0'
+DEBUG: loadVar arg1='|main|' arg2='|y|'
+DEBUG: loadVar main.y offset 2
+DEBUG: IR line received: 'param t0 ___ ___'
+DEBUG: IR line received: 'call output 1 ___'
+DEBUG: IR line received: 'loadVar main x t0'
+DEBUG: loadVar arg1='|main|' arg2='|x|'
+DEBUG: loadVar main.x offset 1
+DEBUG: IR line received: 'param t0 ___ ___'
+DEBUG: IR line received: 'loadVar main y t0'
+DEBUG: loadVar arg1='|main|' arg2='|y|'
+DEBUG: loadVar main.y offset 2
+DEBUG: IR line received: 'param t0 ___ ___'
+DEBUG: IR line received: 'call gcd 2 ___'
+DEBUG: IR line received: 'move t0 $rf ___'
+DEBUG: Moved value from $rf to t0 (r4 <- r28)
+DEBUG: IR line received: 'param t0 ___ ___'
+DEBUG: IR line received: 'call output 1 ___'
+DEBUG: IR line received: 'funFim main ___ ___'
+DEBUG: IR line received: ''
+Generic assembly generation completed: gcd.asm
+Generated 56 instructions for processor execution
+✓ Código Assembly gerado em gcd.asm
+DEBUG: Stored label 'L0' at address 0
+DEBUG: Stored label 'L1' at address 0
+Collected 4 labels:
+  gcd -> address 1
+  L0 -> address 16
+  L1 -> address 31
+  main -> address 33
+DEBUG: parseImmediate called for '34'
+DEBUG: Label '34' NOT FOUND. Attempting atoi. Result: 34
+DEBUG: parseImmediate called for '3'
+DEBUG: Label '3' NOT FOUND. Attempting atoi. Result: 3
+DEBUG: parseImmediate called for '0'
+DEBUG: Label '0' NOT FOUND. Attempting atoi. Result: 0
+DEBUG: parseImmediate called for '1'
+DEBUG: Label '1' NOT FOUND. Attempting atoi. Result: 1
+DEBUG: parseImmediate called for '2'
+DEBUG: Label '2' NOT FOUND. Attempting atoi. Result: 2
+DEBUG: parseImmediate called for '1'
+DEBUG: Label '1' NOT FOUND. Attempting atoi. Result: 1
+DEBUG: parseImmediate called for '2'
+DEBUG: Label '2' NOT FOUND. Attempting atoi. Result: 2
+DEBUG: parseImmediate called for '2'
+DEBUG: Label '2' NOT FOUND. Attempting atoi. Result: 2
+DEBUG: parseImmediate called for 'L0'
+DEBUG: Found label 'L0' at address 16
+DEBUG: parseImmediate called for '1'
+DEBUG: Label '1' NOT FOUND. Attempting atoi. Result: 1
+DEBUG: parseImmediate called for 'L1'
+DEBUG: Found label 'L1' at address 31
+DEBUG: parseImmediate called for '2'
+DEBUG: Label '2' NOT FOUND. Attempting atoi. Result: 2
+DEBUG: parseImmediate called for '1'
+DEBUG: Label '1' NOT FOUND. Attempting atoi. Result: 1
+DEBUG: parseImmediate called for '1'
+DEBUG: Label '1' NOT FOUND. Attempting atoi. Result: 1
+DEBUG: parseImmediate called for '2'
+DEBUG: Label '2' NOT FOUND. Attempting atoi. Result: 2
+DEBUG: parseImmediate called for '2'
+DEBUG: Label '2' NOT FOUND. Attempting atoi. Result: 2
+DEBUG: parseImmediate called for 'gcd'
+DEBUG: Found label 'gcd' at address 1
+DEBUG: parseImmediate called for '0'
+DEBUG: Label '0' NOT FOUND. Attempting atoi. Result: 0
+DEBUG: parseImmediate called for '3'
+DEBUG: Label '3' NOT FOUND. Attempting atoi. Result: 3
+DEBUG: parseImmediate called for '3'
+DEBUG: Label '3' NOT FOUND. Attempting atoi. Result: 3
+DEBUG: parseImmediate called for '0'
+DEBUG: Label '0' NOT FOUND. Attempting atoi. Result: 0
+DEBUG: parseImmediate called for '1'
+DEBUG: Label '1' NOT FOUND. Attempting atoi. Result: 1
+DEBUG: parseImmediate called for '1'
+DEBUG: Label '1' NOT FOUND. Attempting atoi. Result: 1
+DEBUG: parseImmediate called for '2'
+DEBUG: Label '2' NOT FOUND. Attempting atoi. Result: 2
+DEBUG: parseImmediate called for '2'
+DEBUG: Label '2' NOT FOUND. Attempting atoi. Result: 2
+DEBUG: parseImmediate called for '1'
+DEBUG: Label '1' NOT FOUND. Attempting atoi. Result: 1
+DEBUG: parseImmediate called for '2'
+DEBUG: Label '2' NOT FOUND. Attempting atoi. Result: 2
+DEBUG: parseImmediate called for 'gcd'
+DEBUG: Found label 'gcd' at address 1
+Binary generation completed:
+  Clean binary: gcd.bin
+  Commented binary: gcd.binbd
+Generated 57 binary instructions
+✓ Código Binário limpo gerado em gcd.bin
+✓ Código Binário comentado gerado em gcd.binbd
+✓ Código Assembly gerado

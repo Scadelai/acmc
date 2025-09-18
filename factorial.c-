@@ -1,0 +1,28 @@
+/* Factorial Calculator - All logic in main
+ * Calculates n! using repeated multiplication
+ * Uses integer arithmetic with loop-based multiplication
+ */
+
+void main(void) {
+    int n;
+    int result;
+    int counter;
+    int temp;
+    int addcounter;
+    int one;
+    
+    one = 1;
+
+    n = input();
+    output(n);
+    
+    result = 1;
+    counter = 1;
+            
+    while (counter <= n) {
+        result = result * counter;
+        counter = counter + one;
+    }
+        
+    output(result); /* Final factorial result */
+}

@@ -1,0 +1,23 @@
+int testmemory(void) {
+    int dummya;
+    int dummyb; 
+    int dummyc;
+    int dummyd;
+    int target;  /* This will be at offset 5 */
+    
+    target = 42;
+    output(target);  /* Should output 42 */
+    
+    if (target >= 40) {
+        output(999);  /* Should branch and output 999 */
+    }
+    
+    output(target);  /* Should output 42 again */
+    return target;
+}
+
+void main(void) {
+    int result;
+    result = testmemory();
+    output(result);
+}

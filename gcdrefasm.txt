@@ -1,0 +1,81 @@
+# Assembly Corrigido - Processador MIPS Customizado
+# Implementa:
+# - Gerenciamento de pilha com Frame Pointer
+# - Suporte a arrays
+# - Variáveis globais com $gp
+# - Passagem robusta de parâmetros
+
+  0: LI         GP, 144
+  1: LI         SP, 255
+  2: J          49
+gcd:
+  3: SUBI       R2, SP, 1
+  4: SW         RA, 0(R2)
+  5: SUBI       R2, SP, 2
+  6: SW         FP, 0(R2)
+  7: SUBI       SP, SP, 8
+  8: ADDI       FP, SP, 4
+  9: SW         R4, 0(FP)
+ 10: SW         R5, 1(FP)
+ 11: LI         R1, 0
+ 12: LW         R2, 1(FP)
+ 13: BNE        R2, R1, 23
+ 14: LW         R3, 0(FP)
+ 15: MOVE       R1, R3
+ 16: ADDI       SP, FP, 4
+ 17: SUBI       R2, SP, 2
+ 18: LW         FP, 0(R2)
+ 19: SUBI       R2, SP, 1
+ 20: LW         RA, 0(R2)
+ 21: ADDI       SP, SP, 8
+ 22: JR         RA
+L0:
+ 23: LW         R3, 0(FP)
+ 24: LW         R2, 1(FP)
+ 25: DIV        R4, R3, R2
+ 26: LW         R2, 1(FP)
+ 27: MULT       R5, R4, R2
+ 28: LW         R3, 0(FP)
+ 29: SUB        R6, R3, R5
+ 30: LW         R2, 1(FP)
+ 31: MOVE       R4, R2
+ 32: MOVE       R5, R6
+ 33: JAL        3
+ 34: MOVE       R7, R1
+ 35: MOVE       R1, R7
+ 36: ADDI       SP, FP, 4
+ 37: SUBI       R2, SP, 2
+ 38: LW         FP, 0(R2)
+ 39: SUBI       R2, SP, 1
+ 40: LW         RA, 0(R2)
+ 41: ADDI       SP, SP, 8
+ 42: JR         RA
+L1:
+ 43: ADDI       SP, FP, 4
+ 44: SUBI       R2, SP, 2
+ 45: LW         FP, 0(R2)
+ 46: SUBI       R2, SP, 1
+ 47: LW         RA, 0(R2)
+ 48: ADDI       SP, SP, 8
+main:
+ 49: SUBI       R2, SP, 2
+ 50: SW         FP, 0(R2)
+ 51: SUBI       SP, SP, 2
+ 52: MOVE       FP, SP
+ 53: INPUT      R8
+ 54: OUTPUTREG  R8
+ 55: MOVE       R9, R8
+ 56: SW         R9, 0(FP)
+ 57: INPUT      R10
+ 58: OUTPUTREG  R10
+ 59: MOVE       R11, R10
+ 60: SW         R11, 1(FP)
+ 61: LW         R9, 0(FP)
+ 62: MOVE       R4, R9
+ 63: LW         R11, 1(FP)
+ 64: MOVE       R5, R11
+ 65: JAL        3
+ 66: MOVE       R12, R1
+ 67: MOVE       R7, R1
+ 68: OUTPUTREG  R12
+ 69: HALT      

@@ -1,0 +1,20 @@
+/* Test modulo calculation step by step */
+
+void main(void)
+{
+    int u; int v; int a; int b; int result;
+    u = 6;
+    v = 4;
+    
+    output(u);    /* Should output 6 */
+    output(v);    /* Should output 4 */
+    
+    a = u / v;     /* Should be 1 */
+    output(a);     /* Should output 1 */
+    
+    b = a * v; /* Should be 1*4 = 4 */
+    output(b);     /* Should output 4 */
+    
+    result = u - b; /* Should be 6-4 = 2 */
+    output(result);     /* Should output 2 */
+}

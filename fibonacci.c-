@@ -1,0 +1,54 @@
+/* Fibonacci Sequence Generator
+ * Generates and displays the first n numbers of Fibonacci sequence
+ * Uses iterative approach to avoid stack overflow
+ */
+
+int fibonacci(int n) {
+    int a;
+    int b;
+    int temp;
+    int i;
+    
+    output(n);
+    
+    if (n <= 0) {
+        output(666); /* Error: invalid input */
+        return 0;
+    }
+    
+    if (n == 1) {
+        output(0);
+        return 0;
+    }
+    
+    if (n == 2) {
+        output(0);
+        output(1);
+        return 1;
+    }
+    
+    /* Initialize first two numbers */
+    a = 0;
+    b = 1;
+    
+    i = 2;
+    while (i < n) {
+        temp = a + b;
+        a = b;
+        b = temp;
+        i = i + 1;
+    }
+    
+    return b;
+}
+
+void main(void) {
+    int count;
+    int result;
+    
+    count = input();
+    output(count);
+    
+    result = fibonacci(count);
+    output(result);
+}

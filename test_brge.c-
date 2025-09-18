@@ -1,0 +1,24 @@
+int testbrge(void) {
+    int i;
+    int n;
+    
+    i = 2;  
+    n = 5;
+    
+    output(i);
+    output(n);
+    
+    while (i < n) {
+        output(i);
+        i = i + 1;
+    }
+    
+    output(999);  /* Should reach here when i >= n */
+    return i;
+}
+
+void main(void) {
+    int result;
+    result = testbrge();
+    output(result);
+}

@@ -812,12 +812,14 @@ char *generate_expression_code(TreeNode *tree) {
                         case SUB:  op_str = "sub"; break;
                         case MULT: op_str = "mult"; break;
                         case DIV:  op_str = "div"; break;  // Use DIV instead of divisao
-                        case IGDAD:  op_str = "set"; break;
-                        case DIFER:  op_str = "sdt"; break;
-                        case MAIIG: op_str = "sget"; break;
-                        case MENIG: op_str = "slet"; break;
-                        case MAIOR:  op_str = "sgt"; break;
-                        case MENOR:  op_str = "slt"; break;
+                        // For comparison operations, we'll now use simple set/clear pattern
+                        // These should rarely be used now with direct branching
+                        case IGDAD:  op_str = "set"; break;  // Use processor's SET instruction
+                        case DIFER:  op_str = "sne"; break;  // Set not equal (custom)
+                        case MAIIG: op_str = "sge"; break;   // Set greater equal (custom)
+                        case MENIG: op_str = "sle"; break;   // Set less equal (custom)
+                        case MAIOR:  op_str = "sgt"; break;  // Set greater than (custom)
+                        case MENOR:  op_str = "slt"; break;  // Use processor's SLT instruction
                         default:
                             fprintf(stderr, "Erro: Operador desconhecido\n");
                             op_str = "add"; // fallback
@@ -941,53 +943,47 @@ static void generate_statement_code(TreeNode *tree) {
                     label_false = newLabel(); // Label for the 'else' part or end of if (if no else)
                     label_end_if = newLabel(); // Label for the end of the entire if-else construct
                     
-                    // Generate condition evaluation
+                    // Generate condition evaluation - DIRECT BRANCH APPROACH
                     if (tree->child[0]->kind.exp == OpK) {
-                        // Comparison operation - generate comparison and conditional jump
+                        // Comparison operation - generate direct branch instructions
                         char *op1_temp = generate_expression_code(tree->child[0]->child[0]);
                         char *op2_temp = generate_expression_code(tree->child[0]->child[1]);
                         
-                        // Generate comparison operation that sets result register
-                        cond_temp = allocate_temp_register();
-                        const char *op_str = NULL;
+                        // Generate direct branch instruction based on comparison operator
+                        const char *branch_op = NULL;
                         switch (tree->child[0]->attr.opr) {
-                            case IGDAD: op_str = "seq"; break;
-                            case DIFER: op_str = "sne"; break;
-                            case MAIIG: op_str = "sge"; break;
-                            case MENIG: op_str = "sle"; break;
-                            case MAIOR: op_str = "sgt"; break;
-                            case MENOR: op_str = "slt"; break;
+                            case IGDAD: branch_op = "BR_NE"; break;  // If NOT equal, branch to false
+                            case DIFER: branch_op = "BR_EQ"; break;  // If equal, branch to false  
+                            case MAIIG: branch_op = "BR_LT"; break;  // If less than, branch to false
+                            case MENIG: branch_op = "BR_GT"; break;  // If greater than, branch to false
+                            case MAIOR: branch_op = "BR_LE"; break;  // If less or equal, branch to false
+                            case MENOR: branch_op = "BR_GE"; break;  // If greater or equal, branch to false
                             default:
                                 fprintf(stderr, "Erro: Operador de comparação desconhecido\n");
-                                op_str = "seq";
+                                branch_op = "BR_NE";
                                 break;
                         }
                         
                         if (outputFile) {
-                            emit_buffered("%s %s %s %s", op_str, op1_temp, op2_temp, cond_temp);
+                            emit_buffered("%s %s %s %s", branch_op, op1_temp, op2_temp, label_false);
                         }
                         
                         // Release comparison operands
                         if (op1_temp[0] == 't') release_temp_register(op1_temp);
                         if (op2_temp[0] == 't') release_temp_register(op2_temp);
-                        release_temp_register(cond_temp);
                         
                     } else { 
-                        // Simple condition variable
+                        // Simple condition variable - branch if zero (false)
                         cond_temp = generate_expression_code(tree->child[0]);
+                        emit_buffered("BR_EQ %s r0 %s", cond_temp, label_false);
                         if (cond_temp[0] == 't') release_temp_register(cond_temp);
                     }
 
-                    // We want to branch to the ELSE block if the condition (v==0) is FALSE (cond_temp is 0).
-                    // So, if cond_temp IS EQUAL to 0, branch to label_false (the 'else' block).
-                    emit_buffered("BR_EQ %s r0 %s", cond_temp, label_false); // If cond_temp == 0 (i.e., v!=0), branch to label_false (ELSE).
-                                                    // If cond_temp != 0 (i.e., v==0), fall through to THEN.
-
-                    // THEN BLOCK (if v == 0)
+                    // THEN BLOCK - fall through if condition is true
                     generate_code_single(tree->child[1]); 
                     emit_buffered("jump %s ___ ___", label_end_if); // Jump to end of if-else
 
-                    // ELSE BLOCK (if v != 0)
+                    // ELSE BLOCK
                     emit_buffered("label_op %s ___ ___", label_false); // Label for 'else' part
                     if (tree->child[2] != NULL) { 
                         generate_code_recursive(tree->child[2]); // Process all siblings in else block
@@ -1006,36 +1002,36 @@ static void generate_statement_code(TreeNode *tree) {
                         emit_buffered("label_op %s ___ ___", label1);
                     }
                     
-                    // Generate condition evaluation (similar to IF)
+                    // Generate condition evaluation - DIRECT BRANCH APPROACH
                     if (tree->child[0]->kind.exp == OpK) {
+                        // Comparison operation - generate direct branch to exit
                         char *op1_temp = generate_expression_code(tree->child[0]->child[0]);
                         char *op2_temp = generate_expression_code(tree->child[0]->child[1]);
                         
-                        cond_temp = allocate_temp_register();
-                        const char *op_str = NULL;
+                        // Generate direct branch instruction to EXIT loop when condition is FALSE
+                        const char *branch_op = NULL;
                         switch (tree->child[0]->attr.opr) {
-                            case IGDAD: op_str = "set"; break;
-                            case DIFER: op_str = "sdt"; break;
-                            case MAIIG: op_str = "sget"; break;
-                            case MENIG: op_str = "slet"; break;
-                            case MAIOR: op_str = "sgt"; break;
-                            case MENOR: op_str = "slt"; break;
-                            default: op_str = "set"; break;
+                            case IGDAD: branch_op = "BR_NE"; break;  // If NOT equal, exit loop
+                            case DIFER: branch_op = "BR_EQ"; break;  // If equal, exit loop
+                            case MAIIG: branch_op = "BR_LT"; break;  // If less than, exit loop
+                            case MENIG: branch_op = "BR_GT"; break;  // If greater than, exit loop
+                            case MAIOR: branch_op = "BR_LE"; break;  // If less or equal, exit loop
+                            case MENOR: branch_op = "BR_GE"; break;  // If greater or equal, exit loop
+                            default: branch_op = "BR_NE"; break;
                         }
                         
                         if (outputFile) {
-                            emit_buffered("%s %s %s %s", op_str, op1_temp, op2_temp, cond_temp);
-                            emit_buffered("bne %s %s ___", cond_temp, label2);
+                            emit_buffered("%s %s %s %s", branch_op, op1_temp, op2_temp, label2);
                         }
                         
                         if (op1_temp[0] == 't') release_temp_register(op1_temp);
                         if (op2_temp[0] == 't') release_temp_register(op2_temp);
-                        release_temp_register(cond_temp);
                         
                     } else {
+                        // Simple condition variable - exit loop if zero (false)
                         cond_temp = generate_expression_code(tree->child[0]);
                         if (outputFile) {
-                            emit_buffered("bne %s %s ___", cond_temp, label2);
+                            emit_buffered("BR_EQ %s r0 %s", cond_temp, label2);
                         }
                         if (cond_temp[0] == 't') release_temp_register(cond_temp);
                     }
@@ -1635,6 +1631,30 @@ void reset_compilation_stats(void) {
     stats.total_labels = 0;
     stats.total_functions = 0;
     stats.optimization_count = 0;
+}
+
+// Reset all codegen state for new compilation
+void codegen_reset(void) {
+    // Reset register pool
+    register_pool_initialized = 0;
+    current_scope_level = 0;
+    
+    // Reset memory management
+    MemoryBlock *current = memory_blocks;
+    while (current != NULL) {
+        MemoryBlock *next = current->next;
+        free(current);
+        current = next;
+    }
+    memory_blocks = NULL;
+    current_stack_offset = 0;
+    func_stack_frame_size = 0;
+    
+    // Reset variable table
+    variable_count = 0;
+    
+    // Reset stats
+    reset_compilation_stats();
 }
 
 // Versão aprimorada da função emit_buffered com estatísticas

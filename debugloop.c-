@@ -1,0 +1,21 @@
+int debugloop(int n) {
+    int i;
+    
+    output(n);
+    
+    i = 2;
+    while (i < n) {
+        output(i);  /* Debug: show current i */
+        output(n);  /* Debug: show current n */
+        i = i + 1;
+    }
+    
+    output(999);  /* Should reach here when loop exits */
+    return i;
+}
+
+void main(void) {
+    int result;
+    result = debugloop(5);
+    output(result);
+}

@@ -1,0 +1,27 @@
+/* Iterative GCD to test without recursion */
+
+int gcd_iterative(int u, int v)
+{
+    int temp;
+    output(u);
+    output(v);
+    
+    while (v != 0) {
+        temp = v;
+        v = u - (u/v)*v;  /* u mod v */
+        u = temp;
+        output(u);
+        output(v);
+    }
+    return u;
+}
+
+void main(void)
+{
+    int x; int y;
+    x = input(); 
+    y = input();
+    output(x);
+    output(y);
+    output(gcd_iterative(x, y));
+}

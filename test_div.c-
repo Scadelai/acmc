@@ -1,0 +1,14 @@
+/* Test division operations */
+
+void main(void)
+{
+    int a; int b; int result;
+    a = input ();
+    output(a);
+    b = input ();
+    output(b);
+    result = a / b;
+    output(result); /* Should output 1 */
+    result = a - (a/b)*b;
+    output(result); /* Should output 2 (6 mod 4) */
+}

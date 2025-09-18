@@ -1,0 +1,11 @@
+/* Ultra simple parameter test */
+
+int testparams(int a, int b) {
+    output(a);
+    output(b);
+    return 0;
+}
+
+void main(void) {
+    testparams(12, 3);
+}

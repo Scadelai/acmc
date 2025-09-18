@@ -1,0 +1,28 @@
+/* Even/Odd Number Checker
+ * Determines if a number is even or odd using manual division
+ * Uses main-only template to avoid function parameter issues
+ * Returns: 1 for odd, 0 for even, 999 for negative numbers
+ */
+
+int main(void)
+{
+    int n;
+    int remainder;
+    int two;
+
+    two = 2;
+    
+    n = input();
+    output(n);
+
+    /* Manual division by 2 to check even/odd */
+    remainder = n-n/two*two;
+        
+    if (remainder == 0) {
+        output(222);
+    } else {
+        output(111);
+    }
+    
+    return 0;
+}

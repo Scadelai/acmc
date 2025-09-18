@@ -475,7 +475,30 @@ void processIRLine(AssemblyContext *ctx, const char *line) {
                 }
             }
             printf("DEBUG: loadVar %s.%s offset %d\n", arg1, arg2, offset);
-            int dest_reg = allocateRegister(ctx, arg3);
+            
+            int dest_reg;
+            
+            // Check if the next instruction is a param instruction
+            // This indicates we're loading for a parameter, so we need unique registers
+            bool is_param_load = false;
+            // Look ahead at the next IR instruction to see if it's a param
+            // For now, we'll use a heuristic: if arg3 is a temporary (t0, t1, etc.)
+            // and we're in a sequence where param_counter is being used
+            if (arg3[0] == 't') {
+                // Force new allocation for parameter preparation
+                // Invalidate any existing mapping for this temporary
+                for (int i = 0; i < 128; i++) {
+                    if (ctx->reg_map[i].valid && strcmp(ctx->reg_map[i].ir_name, arg3) == 0) {
+                        ctx->reg_map[i].valid = 0;  // Invalidate to force new allocation
+                        is_param_load = true;
+                        break;
+                    }
+                }
+            }
+            
+            dest_reg = allocateRegister(ctx, arg3);
+            printf("DEBUG: loadVar allocated register r%d for %s (param_load=%d)\n", dest_reg, arg3, is_param_load);
+            
             if (offset >= 0) {
                 emitInstruction(ctx, "lw r%d r30 %d", dest_reg, offset);
             } else {
@@ -519,10 +542,12 @@ void processIRLine(AssemblyContext *ctx, const char *line) {
             
         else if (strcmp(op, "param") == 0) {
             ctx->param_counter++; // 1 for first param, 2 for second
+            printf("DEBUG: param instruction, counter=%d, arg1='%s'\n", ctx->param_counter, arg1);
             
             if (isImmediate(arg1)) {
                 // Handle immediate values directly with li instruction
                 int immediate_val = atoi(arg1);
+                printf("DEBUG: param immediate value %d\n", immediate_val);
                 if (ctx->param_counter == 1) {
                     if (immediate_val == 0) {
                         emitInstruction(ctx, "move r1 r0"); // li r1, 0 -> move r1, r0
@@ -544,8 +569,9 @@ void processIRLine(AssemblyContext *ctx, const char *line) {
                     }
                 }
             } else {
-                // Handle register/variable values
+                // Handle register/variable values - move directly to parameter register
                 int param_val_reg = allocateRegister(ctx, arg1); // This is the temp holding the parameter's value
+                printf("DEBUG: param variable/register, allocated r%d for '%s'\n", param_val_reg, arg1);
                 if (ctx->param_counter == 1) {
                     emitInstruction(ctx, "move r1 r%d", param_val_reg); // First parameter goes to r1
                 } else if (ctx->param_counter == 2) {
@@ -613,15 +639,10 @@ void processIRLine(AssemblyContext *ctx, const char *line) {
         } else if (strcmp(op, "sub") == 0) {
             // Subtraction: sub src1 src2 dest
             int src1_reg = allocateRegister(ctx, arg1);
+            int src2_reg = allocateRegister(ctx, arg2);
             int dest_reg = allocateRegister(ctx, arg3);
             
-            if (isImmediate(arg2)) {
-                int val = atoi(arg2);
-                emitInstruction(ctx, "subi r%d r%d %d", dest_reg, src1_reg, val);
-            } else {
-                int src2_reg = allocateRegister(ctx, arg2);
-                emitInstruction(ctx, "sub r%d r%d r%d", dest_reg, src1_reg, src2_reg);
-            }
+            emitInstruction(ctx, "sub r%d r%d r%d", dest_reg, src1_reg, src2_reg);
             
         } else if (strcmp(op, "mult") == 0) {
             // Multiplication: mult src1 src2 dest
@@ -958,33 +979,114 @@ void processIRLine(AssemblyContext *ctx, const char *line) {
             }
             
         } else if (strcmp(op, "BR_NE") == 0) {
-            int cond_reg = allocateRegister(ctx, arg1);
-            char *branch_label_copy = strdup(arg3); 
-            emitInstruction(ctx, "bne r%d r0 %s", cond_reg, branch_label_copy); // Use bne for BR_NE
-            free(branch_label_copy); 
+            // Direct branch if not equal: BR_NE src1 src2 label
+            int src1_reg = allocateRegister(ctx, arg1);
+            int src2_reg;
+            
+            if (isImmediate(arg2)) {
+                // Compare with immediate value
+                int val = atoi(arg2);
+                if (val == 0) {
+                    emitInstruction(ctx, "bne r%d r0 %s", src1_reg, arg3);
+                } else {
+                    emitInstruction(ctx, "li r58 %d", val);
+                    emitInstruction(ctx, "bne r%d r58 %s", src1_reg, arg3);
+                }
+            } else {
+                src2_reg = allocateRegister(ctx, arg2);
+                emitInstruction(ctx, "bne r%d r%d %s", src1_reg, src2_reg, arg3);
+            }
 
-        } else if (strcmp(op, "BR_EQ") == 0) { // <-- ADD THIS NEW BLOCK
-            int cond_reg = allocateRegister(ctx, arg1);
-            char *branch_label_copy = strdup(arg3); 
-            emitInstruction(ctx, "beq r%d r0 %s", cond_reg, branch_label_copy); // Use beq for BR_EQ
-            free(branch_label_copy);
+        } else if (strcmp(op, "BR_EQ") == 0) {
+            // Direct branch if equal: BR_EQ src1 src2 label
+            int src1_reg = allocateRegister(ctx, arg1);
+            int src2_reg;
+            
+            if (isImmediate(arg2)) {
+                // Compare with immediate value  
+                int val = atoi(arg2);
+                if (val == 0) {
+                    emitInstruction(ctx, "beq r%d r0 %s", src1_reg, arg3);
+                } else {
+                    emitInstruction(ctx, "li r58 %d", val);
+                    emitInstruction(ctx, "beq r%d r58 %s", src1_reg, arg3);
+                }
+            } else {
+                src2_reg = allocateRegister(ctx, arg2);
+                emitInstruction(ctx, "beq r%d r%d %s", src1_reg, src2_reg, arg3);
+            }
 
         } else if (strcmp(op, "BR_GE") == 0) {
-            // Branch if greater or equal (comparison result >= 0)
-            // This often means "if condition is false, skip the then block"
-            emitInstruction(ctx, "bgte r59 r0 %s", arg1);
+            // Direct branch if greater or equal: BR_GE src1 src2 label
+            int src1_reg = allocateRegister(ctx, arg1);
+            int src2_reg;
+            
+            if (isImmediate(arg2)) {
+                int val = atoi(arg2);
+                if (val == 0) {
+                    emitInstruction(ctx, "bgte r%d r0 %s", src1_reg, arg3);
+                } else {
+                    emitInstruction(ctx, "li r58 %d", val);
+                    emitInstruction(ctx, "bgte r%d r58 %s", src1_reg, arg3);
+                }
+            } else {
+                src2_reg = allocateRegister(ctx, arg2);
+                emitInstruction(ctx, "bgte r%d r%d %s", src1_reg, src2_reg, arg3);
+            }
             
         } else if (strcmp(op, "BR_LT") == 0) {
-            // Branch if less than (comparison result < 0)
-            emitInstruction(ctx, "blt r59 r0 %s", arg1);
+            // Direct branch if less than: BR_LT src1 src2 label
+            int src1_reg = allocateRegister(ctx, arg1);
+            int src2_reg;
+            
+            if (isImmediate(arg2)) {
+                int val = atoi(arg2);
+                if (val == 0) {
+                    emitInstruction(ctx, "blt r%d r0 %s", src1_reg, arg3);
+                } else {
+                    emitInstruction(ctx, "li r58 %d", val);
+                    emitInstruction(ctx, "blt r%d r58 %s", src1_reg, arg3);
+                }
+            } else {
+                src2_reg = allocateRegister(ctx, arg2);
+                emitInstruction(ctx, "blt r%d r%d %s", src1_reg, src2_reg, arg3);
+            }
             
         } else if (strcmp(op, "BR_LE") == 0) {
-            // Branch if less than or equal (comparison result <= 0)  
-            emitInstruction(ctx, "blte r59 r0 %s", arg1);
+            // Direct branch if less than or equal: BR_LE src1 src2 label
+            int src1_reg = allocateRegister(ctx, arg1);
+            int src2_reg;
+            
+            if (isImmediate(arg2)) {
+                int val = atoi(arg2);
+                if (val == 0) {
+                    emitInstruction(ctx, "blte r%d r0 %s", src1_reg, arg3);
+                } else {
+                    emitInstruction(ctx, "li r58 %d", val);
+                    emitInstruction(ctx, "blte r%d r58 %s", src1_reg, arg3);
+                }
+            } else {
+                src2_reg = allocateRegister(ctx, arg2);
+                emitInstruction(ctx, "blte r%d r%d %s", src1_reg, src2_reg, arg3);
+            }
             
         } else if (strcmp(op, "BR_GT") == 0) {
-            // Branch if greater than (comparison result > 0)
-            emitInstruction(ctx, "bgt r59 r0 %s", arg1);
+            // Direct branch if greater than: BR_GT src1 src2 label
+            int src1_reg = allocateRegister(ctx, arg1);
+            int src2_reg;
+            
+            if (isImmediate(arg2)) {
+                int val = atoi(arg2);
+                if (val == 0) {
+                    emitInstruction(ctx, "bgt r%d r0 %s", src1_reg, arg3);
+                } else {
+                    emitInstruction(ctx, "li r58 %d", val);
+                    emitInstruction(ctx, "bgt r%d r58 %s", src1_reg, arg3);
+                }
+            } else {
+                src2_reg = allocateRegister(ctx, arg2);
+                emitInstruction(ctx, "bgt r%d r%d %s", src1_reg, src2_reg, arg3);
+            }
             
         } else if (strcmp(op, "GOTO") == 0) {
             // Unconditional jump

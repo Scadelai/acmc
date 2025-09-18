@@ -1,0 +1,31 @@
+/* Power Calculator - All logic in main
+ * Calculates base^exponent using repeated multiplication
+ * Uses manual multiplication (no * operator)
+ */
+
+void main(void) {
+    int base;
+    int exponent;
+    int result;
+    int counter;
+    int temp;
+    int addcounter;
+    int one;
+
+    one = 1;
+
+    base = input();
+    output(base);
+    exponent = input();
+    output(exponent);
+    result = 1;
+    
+    counter = 0;
+    
+    while (counter < exponent) {            
+        result = result * base;
+        counter = counter + one;
+    }
+    
+    output(result);
+}

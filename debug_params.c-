@@ -1,0 +1,20 @@
+/* Debug parameter test */
+
+int debugdivide(int dividend, int divisor) {
+    /* Output parameters immediately upon entering function */
+    output(dividend);
+    output(divisor);
+    return dividend;
+}
+
+void main(void) {
+    int a;
+    int b;
+    
+    a = input();
+    output(a);  /* Should see first input */
+    b = input();
+    output(b);  /* Should see second input */
+    
+    debugdivide(a, b);  /* Should see the same values */
+}

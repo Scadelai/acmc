@@ -1,0 +1,16 @@
+int main(void) {
+    int i;
+    int n;
+    
+    i = 5;
+    n = 3;
+    output(i);
+    output(n);
+    
+    while (i >= n) {
+        output(i);
+        i = i - 1;
+    }
+    
+    output(999);
+}

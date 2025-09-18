@@ -1,0 +1,39 @@
+/* Triangle Area Calculator - All logic in main
+ * Calculates area using base * height / 2 formula
+ * Uses integer arithmetic to avoid floating point
+ */
+
+void main(void) {
+    int a;
+    int b;
+    int c;
+    int base;
+    int height;
+    int area;
+    int invalid;
+    int areaone;
+    int two;
+    
+    two = 2;
+    a = input();
+    output(a);
+    b = input();
+    output(b);
+    c = input();
+    output(c);
+    
+    if (invalid == 1) {
+        output(777); /* Error: invalid triangle */
+    } else {
+        /* Use first two sides as base and height */
+        base = a;
+        height = b;
+        
+        areaone = base * height;
+        
+        /* Calculate area = base * height / 2 */
+        area = areaone / two;
+        
+        output(area);
+    }
+}

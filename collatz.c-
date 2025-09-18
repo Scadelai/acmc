@@ -1,0 +1,46 @@
+/* Collatz Sequence Counter - All logic in main
+ * Counts steps to reach 1 in Collatz sequence
+ * Rule: if even divide by 2, if odd multiply by 3 and add 1
+ */
+
+void main(void) {
+    int n;
+    int steps;
+    int current;
+    int quotient;
+    int remainder;
+    int temp;
+    int addcounter;
+    int one;
+    int two;
+    int three;
+
+    one = 1;
+    two = 2;
+    three = 3;
+    
+    n = input();
+    output(n);
+    current = n;
+    steps = 0;
+    /* u-u/v*v == u mod v */
+    while (current != 1) {
+        output(current); /* Show current number in sequence */
+         
+        /* Check if current is even using manual division */
+        quotient = 0;
+        remainder = current-current/two*two;
+        
+        if (remainder == 0) {
+            /* Even: divide by 2 */
+            current = current / two;
+        } else {
+            /* Odd: multiply by 3 and add 1 */
+                current = current * three + one;
+        }
+        steps = steps + 1;
+    }
+    
+    output(1); /* Final value (always 1) */
+    output(steps); /* Total number of steps */
+}

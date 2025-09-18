@@ -22,4 +22,7 @@ void findMain(void);
 // Retorna o tipo de dado de uma função com base no nome
 DataType getFunType(char *nome);
 
+// Reset the symbol table (clear all entries)
+void st_reset(void);
+
 #endif

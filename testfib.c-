@@ -1,0 +1,40 @@
+int testfib(int n) {
+    int a;
+    int b; 
+    int temp;
+    int i;
+    
+    output(n);
+    
+    if (n <= 0) {
+        output(666);
+        return 0;
+    }
+    
+    a = 0;
+    b = 1;
+    output(a);
+    output(b);
+    
+    i = 2;
+    while (i < n) {
+        temp = a + b;
+        output(temp);
+        a = b;
+        b = temp;
+        i = i + 1;
+    }
+    
+    return b;
+}
+
+void main(void) {
+    int count;
+    int result;
+    
+    count = input();
+    output(count);
+    
+    result = testfib(count);
+    output(result);
+}

@@ -192,3 +192,27 @@ DataType getFunType(char *nome) {
     return l->dTypes;
   }
 }
+
+// Reset the symbol table by freeing all memory and clearing hash table
+void st_reset(void) {
+  int i;
+  for (i = 0; i < SIZE; i++) {
+    BucketList l = hashTable[i];
+    while (l != NULL) {
+      BucketList next = l->next;
+      
+      // Free line list
+      LineList lines = l->lines;
+      while (lines != NULL) {
+        LineList nextLine = lines->next;
+        free(lines);
+        lines = nextLine;
+      }
+      
+      // Free bucket
+      free(l);
+      l = next;
+    }
+    hashTable[i] = NULL;  // Clear the hash table entry
+  }
+}
